@@ -15,12 +15,13 @@ We wrap it to:
   - Dispatch to registered callbacks
 """
 import asyncio
+from collections import deque
 import json
 import logging
 import threading
 import time
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, Optional, Deque
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +74,10 @@ class FeishuBot:
         self._connected_at: Optional[str] = None
         self._reconnect_count = 0
 
-        self._events: list[dict] = []
+        # Use deque for O(1) append and automatic maxlen management
+        self._events: Deque[dict] = deque(maxlen=MAX_EVENTS)
         self._events_lock = threading.Lock()
+        self._event_index = 0  # Monotonic index counter
 
         self._handlers: list[Callable] = []
         self._connect_handlers: list[Callable] = []
@@ -138,7 +141,8 @@ class FeishuBot:
 
     def get_status(self) -> dict:
         with self._events_lock:
-            recent = list(self._events[-50:])
+            # deque slicing is efficient, no copy of entire list
+            recent = list(self._events)[-50:] if len(self._events) > 50 else list(self._events)
         return {
             "status":          self._status,
             "error":           self._error,
@@ -150,9 +154,16 @@ class FeishuBot:
 
     def get_events(self, after_index: int = 0) -> dict:
         with self._events_lock:
-            total = len(self._events)
-            events = self._events[after_index:] if after_index < total else []
-        return {"total": total, "events": list(events)}
+            total = self._event_index
+            # Convert deque to list and slice from after_index
+            events_list = list(self._events)
+            # Calculate start position based on index difference
+            if after_index < total and events_list:
+                start = max(0, len(events_list) - (total - after_index))
+                events = events_list[start:]
+            else:
+                events = []
+        return {"total": total, "events": events}
 
     def send_message(self, receive_id: str, text: str,
                      receive_id_type: str = "chat_id") -> bool:
@@ -296,43 +307,41 @@ class FeishuBot:
             summary = event_type
 
         entry = {
-            "index":   0,
+            "index":   self._event_index,
             "time":    datetime.now().strftime("%H:%M:%S"),
             "type":    event_type,
             "summary": summary,
             "raw":     event,
         }
         with self._events_lock:
-            entry["index"] = len(self._events)
-            self._events.append(entry)
-            if len(self._events) > MAX_EVENTS:
-                self._events = self._events[-MAX_EVENTS:]
+            self._event_index += 1
+            self._events.append(entry)  # deque automatically drops oldest when full
         logger.info(f"Feishu event [{event_type}]: {summary}")
 
     def _add_system_event(self, etype: str, summary: str):
         entry = {
-            "index":   0,
+            "index":   self._event_index,
             "time":    datetime.now().strftime("%H:%M:%S"),
             "type":    f"system.{etype}",
             "summary": summary,
             "raw":     {},
         }
         with self._events_lock:
-            entry["index"] = len(self._events)
+            self._event_index += 1
             self._events.append(entry)
 
     def _add_reply_event(self, text: str, chat_id: str):
         """Record an outgoing Claude reply as a trackable event."""
         preview = text[:120].replace('\n', ' ')
         entry = {
-            "index":   0,
+            "index":   self._event_index,
             "time":    datetime.now().strftime("%H:%M:%S"),
             "type":    "reply.sent",
             "summary": f"→ {chat_id[:12]}: {preview}",
             "raw":     {"chat_id": chat_id, "text": text[:300]},
         }
         with self._events_lock:
-            entry["index"] = len(self._events)
+            self._event_index += 1
             self._events.append(entry)
         logger.info(f"Claude→Feishu [{chat_id}]: {preview[:60]}")
 

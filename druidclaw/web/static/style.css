@@ -936,7 +936,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 /* ── Feishu page ─────────────────────────────────────────── */
 #feishu-page {
   flex: 1; display: none; flex-direction: column;
-  overflow: hidden; background: var(--bg1);
+  overflow: hidden; background: var(--bg);
 }
 #feishu-page.visible { display: flex; }
 .fb-toolbar {
@@ -980,7 +980,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 /* ── History page ───────────────────────────────────────── */
 #history-page {
   flex: 1; display: none; flex-direction: column;
-  overflow: hidden; background: var(--bg1);
+  overflow: hidden; background: var(--bg);
 }
 #history-page.visible { display: flex; }
 .hist-toolbar {

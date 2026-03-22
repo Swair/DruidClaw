@@ -57,6 +57,8 @@ DruidClaw/
 │   ├── core/          # 核心功能 (会话管理、守护进程)
 │   ├── web/           # Web 界面 (FastAPI)
 │   └── imbot/         # IM 机器人 (飞书、钉钉等)
+├── doc/               # 文档
+├── tests/             # 测试用例
 ├── docker/            # Docker 配置
 ├── requirements.txt   # Python 依赖
 ├── start.sh          # 启动脚本
@@ -113,3 +115,20 @@ DruidClaw/
 ## License
 
 MIT
+
+## 测试
+
+运行所有测试：
+
+```bash
+source venv/bin/activate
+pip install pytest httpx
+pytest -v
+```
+
+详见 [doc/testing.md](doc/testing.md)
+
+## 文档
+
+- [使用文档](doc/usage.md) - 详细的使用指南
+- [测试文档](doc/testing.md) - 测试运行和编写指南

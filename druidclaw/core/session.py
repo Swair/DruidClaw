@@ -25,16 +25,28 @@ LOG_DIR = Path(os.environ.get("DRUIDCLAW_LOG_DIR",
 
 
 class IORecorder:
-    """Records session I/O to a log file with timestamps."""
+    """
+    Records session I/O to a log file with timestamps.
+
+    Optimized for performance:
+    - Uses buffered I/O (no flush on every write)
+    - Flushes every N writes to reduce disk I/O overhead
+    - Still ensures data is flushed on close
+    """
+
+    # Flush every N operations to balance performance and durability
+    FLUSH_INTERVAL = 20
 
     def __init__(self, session_name: str, log_dir: Path = LOG_DIR):
         log_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_path = log_dir / f"app_{session_name}_{ts}.log"
         self.raw_path = log_dir / f"app_{session_name}_{ts}.raw"
-        self._log_f = open(self.log_path, "w", encoding="utf-8", errors="replace")
-        self._raw_f = open(self.raw_path, "wb")
+        # Use buffered I/O - flush periodically instead of on every write
+        self._log_f = open(self.log_path, "w", encoding="utf-8", errors="replace", buffering=1)
+        self._raw_f = open(self.raw_path, "wb", buffering=0)  # Raw file still unbuffered for binary safety
         self._lock = threading.Lock()
+        self._write_count = 0  # Track write operations for periodic flush
         self.write_header(session_name)
 
     def write_header(self, name: str):
@@ -46,27 +58,35 @@ class IORecorder:
 
     def record_output(self, data: bytes):
         with self._lock:
-            ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
             try:
                 text = data.decode("utf-8", errors="replace")
                 self._log_f.write(text)
-                self._log_f.flush()
             except Exception:
                 pass
             self._raw_f.write(data)
-            self._raw_f.flush()
+            # Periodic flush instead of every write
+            self._write_count += 1
+            if self._write_count % self.FLUSH_INTERVAL == 0:
+                self._log_f.flush()
+                self._raw_f.flush()
 
     def record_input(self, data: bytes):
         """Input is also logged (marked differently in raw log)."""
         with self._lock:
             # Write a marker byte sequence to raw (0x01 = input marker)
             self._raw_f.write(b"\x01" + data)
-            self._raw_f.flush()
+            # Periodic flush instead of every write
+            self._write_count += 1
+            if self._write_count % self.FLUSH_INTERVAL == 0:
+                self._raw_f.flush()
 
     def close(self):
         with self._lock:
             ts = datetime.now().isoformat()
             try:
+                # Final flush to ensure all data is written
+                self._log_f.flush()
+                self._raw_f.flush()
                 self._log_f.write(f"\n\n# Session ended: {ts}\n")
                 self._log_f.close()
                 self._raw_f.close()

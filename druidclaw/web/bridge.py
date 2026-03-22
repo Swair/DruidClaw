@@ -62,23 +62,18 @@ def _save_bridge_config():
 
 # ── ANSI / text cleaning ──────────────────────────────────────────
 
-_ANSI_RE = _re.compile(
-    r'\x1b\[[\x20-\x3f]*[\x40-\x7e]'  # CSI (incl. private: ?2026h/l, etc.)
+# Single combined regex for all ANSI/control char cleaning in one pass
+# Merges _ANSI_RE, _CTRL_RE, and sync marker handling
+_ANSI_CLEAN_RE = _re.compile(
+    r'\x1b\[\?2026[hl]'              # sync blocks → replaced with \n specially
+    r'|\x1b\[[\x20-\x3f]*[\x40-\x7e]'  # CSI (incl. private: ?2026h/l, etc.)
     r'|\x1b[()][AB012]'                # charset designation
     r'|\x1b[=>]'                       # alt/normal keypad
     r'|\x1b[DEHMNOPQRSTUVWXYZ\\^_`abcdfghijklnopqrstuvwxyz{|}~]'  # Fe
     r'|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)'  # OSC (window title, etc.)
-    r'|\x00-\x08|\x0b|\x0c|\x0e-\x1f'  # non-printable control chars
-    r'|\r'                              # carriage return
+    r'|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\r]'  # control chars + CR
 )
 
-
-def _strip_ansi(text: str) -> str:
-    """Strip ANSI/VT100 escape sequences, leaving only printable text."""
-    return _ANSI_RE.sub('', text)
-
-
-_CTRL_RE = _re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')  # remaining ctrl chars
 
 # Lines that are Claude Code's TUI chrome (not the actual response)
 _CLAUDE_UI_LINE_RE = _re.compile(
@@ -106,16 +101,17 @@ def _clean_output(raw: str, skip_echo: str = "") -> str:
     """
     Convert raw PTY output to clean Feishu-sendable text:
     1. Treat synchronized-output blocks (\x1b[?2026h..l) as line separators
-    2. Strip all ANSI escape sequences
-    3. Remove non-printable control chars
-    4. Deduplicate consecutive blank lines
-    5. Skip input echo line (first occurrence)
-    6. Skip known Claude TUI chrome lines
+    2. Strip all ANSI escape sequences and control chars in single pass
+    3. Deduplicate consecutive blank lines
+    4. Skip input echo line (first occurrence)
+    5. Skip known Claude TUI chrome lines
     """
-    # Replace synchronized-output markers with newlines so blocks don't merge
-    text = _re.sub(r'\x1b\[\?2026[hl]', '\n', raw)
-    text = _strip_ansi(text)
-    text = _CTRL_RE.sub('', text)
+    # Single-pass cleaning: sync markers → \n, everything else → ''
+    def _replace(match):
+        m = match.group(0)
+        return '\n' if m == '\x1b[?2026h' or m == '\x1b[?2026l' else ''
+
+    text = _ANSI_CLEAN_RE.sub(_replace, raw)
     lines = text.split('\n')
     out = []
     prev_blank = False
@@ -204,7 +200,7 @@ def _claude_state(data: bytes) -> str:
                  — Claude finished, waiting for next input
     - 'unknown': no state marker found in this chunk
     """
-    text = _strip_ansi(data.decode('utf-8', errors='replace'))
+    text = _ANSI_CLEAN_RE.sub('', data.decode('utf-8', errors='replace'))
     text = text.replace('\r', '').replace(' ', '')
     if _WORKING_RE.search(text):
         return 'working'

@@ -48,7 +48,7 @@
       <span class="log-badge" id="log-badge"></span>
     </button>
   </div>
-  <button class="tbtn" onclick="openSrvSettings()" data-i18n="server_settings" title="当前服务器设置">⚙ 服务器设置</button>
+  <button class="tbtn" onclick="openSrvSettings()" title="当前服务器设置">⚙ 服务器设置</button>
   <button class="tbtn" onclick="doLogout()" title="退出登录" style="margin-left:8px">⎋ <span data-i18n="logout">退出</span></button>
 </div>
 
@@ -81,8 +81,8 @@
       <span id="t-pid"  style="display:none" class="t-pid"></span>
       <div class="spacer"></div>
       <span id="t-badge" style="display:none"></span>
-      <button class="tbtn" id="t-clear" style="display:none" onclick="clearTerm()">清屏</button>
-      <button class="tbtn danger" id="t-kill"  style="display:none" onclick="killActive()">终止</button>
+      <button class="tbtn" id="t-clear" style="display:none" onclick="clearTerm()" data-i18n="clear_screen">清屏</button>
+      <button class="tbtn danger" id="t-kill"  style="display:none" onclick="killActive()" data-i18n="kill">终止</button>
       <button class="tbtn" onclick="openTasksModal()" title="定时任务">⏰</button>
       <button class="toggle-skills" onclick="openRightPanel('skills')" title="Skills 面板">🧙‍♂️</button>
       <button class="toggle-skills" onclick="openRightPanel('prompts')" title="Prompt 模板">📝</button>
@@ -126,11 +126,11 @@
     <div class="hist-body">
       <!-- Left: log file list -->
       <div class="hist-list" id="hist-list">
-        <div class="hist-empty">加载中…</div>
+        <div class="hist-empty" data-i18n="loading">加载中…</div>
       </div>
       <!-- Right: summary panel -->
       <div class="hist-detail" id="hist-detail">
-        <div class="hist-empty" style="margin:auto">选择左侧日志文件查看或生成总结</div>
+        <div class="hist-empty" style="margin:auto" data-i18n="hist_select_hint">选择左侧日志文件查看或生成总结</div>
       </div>
     </div>
   </div>
@@ -182,7 +182,7 @@
 <!-- Skills Marketplace modal -->
 <div class="overlay" id="mkt-overlay" onclick="closeMkt(event)">
   <div class="modal mkt-modal" onclick="event.stopPropagation()">
-    <h3 data-i18n="skills_market_title">🏪 Skills 市场</h3>
+    <h3>🏪 Skills 市场</h3>
     <!-- Source tabs -->
     <div class="mkt-source-tabs" id="mkt-src-tabs">
       <!-- filled by JS -->
@@ -245,7 +245,7 @@
 <!-- Prompt template management modal -->
 <div class="overlay" id="prompt-mgmt-overlay" onclick="closePromptMgmt(event)">
   <div class="modal mkt-modal" onclick="event.stopPropagation()" style="width:min(680px,96vw)">
-    <h3>📝 <span data-i18n="prompt_templates">Prompt 模板</span>管理</h3>
+    <h3>📝 <span>Prompt 模板</span>管理</h3>
     <div style="display:flex;gap:14px;flex:1;min-height:0;overflow:hidden">
       <!-- Left: template list -->
       <div style="flex:1;display:flex;flex-direction:column;min-width:0;gap:6px">
@@ -386,7 +386,7 @@
     <h3 data-i18n="create_card">新建卡片</h3>
     <div class="nc-types">
       <div class="nc-type-btn sel" id="nc-t-claude" onclick="selectNcType('claude')">
-        <img src="/static/logo.png" alt="" style="height:20px;width:20px;object-fit:contain"><span data-i18n="claude_session">Claude 会话</span>
+        🤖 <span data-i18n="claude_session">Claude 会话</span>
       </div>
     </div>
     <div id="nc-claude-f">
@@ -478,68 +478,68 @@
     <h3 data-i18n="new_im_config">新建IM配置</h3>
     <div class="nc-types" style="flex-wrap:wrap;gap:6px">
       <div class="nc-type-btn sel" id="im-t-feishu" onclick="selectImType('feishu')">
-        <span class="nc-emoji">🔔</span><span data-i18n="im_feishu">飞书</span>
+        <span class="nc-emoji">🔔</span><span>飞书</span>
       </div>
       <div class="nc-type-btn" id="im-t-telegram" onclick="selectImType('telegram')">
         <span class="nc-emoji">✈️</span><span>Telegram</span>
       </div>
       <div class="nc-type-btn" id="im-t-dingtalk" onclick="selectImType('dingtalk')">
-        <span class="nc-emoji">📎</span><span data-i18n="im_dingtalk">钉钉</span>
+        <span class="nc-emoji">📎</span><span>钉钉</span>
       </div>
       <div class="nc-type-btn" id="im-t-qq" onclick="selectImType('qq')">
         <span class="nc-emoji">🐧</span><span>QQ</span>
       </div>
       <div class="nc-type-btn" id="im-t-wework" onclick="selectImType('wework')">
-        <span class="nc-emoji">💼</span><span data-i18n="im_wework">企业微信</span>
+        <span class="nc-emoji">💼</span><span>企业微信</span>
       </div>
     </div>
     <!-- 飞书配置表单 -->
     <div id="im-feishu-f">
       <div class="field"><label>名称</label><input id="im-fname" placeholder="飞书Bot"/></div>
-      <div class="field"><label>App ID</label><input id="im-appid" placeholder="cli_xxxxxxxxxx" autocomplete="off"/></div>
-      <div class="field"><label>App Secret</label><input id="im-secret" type="password" placeholder="••••••••••" autocomplete="new-password"/></div>
+      <div class="field"><label>App ID</label><input id="im-appid" placeholder="cli_xxxxxxxxxx" data-i18n-ph="im_appid_ph" autocomplete="off"/></div>
+      <div class="field"><label>App Secret</label><input id="im-secret" type="password" placeholder="••••••••••" data-i18n-ph="im_secret_ph" autocomplete="new-password"/></div>
       <div class="field"><label>回复延迟(秒)</label><input id="im-delay" type="number" min="0.5" max="60" step="0.5" value="4"/></div>
     </div>
     <!-- Telegram 配置表单 -->
     <div id="im-telegram-f" style="display:none">
-      <div class="field"><label>名称</label><input id="im-tg-name" placeholder="TelegramBot"/></div>
-      <div class="field"><label>Bot Token</label><input id="im-tg-token" type="password" placeholder="123456789:AABBcc..." autocomplete="new-password"/></div>
+      <div class="field"><label data-i18n="im_tg_name_ph">名称</label><input id="im-tg-name" placeholder="TelegramBot" data-i18n-ph="im_tg_name_ph"/></div>
+      <div class="field"><label>Bot Token</label><input id="im-tg-token" type="password" placeholder="123456789:AABBcc..." data-i18n-ph="im_tg_token_ph" autocomplete="new-password"/></div>
       <div class="field"><label>回复延迟(秒)</label><input id="im-tg-delay" type="number" min="0.5" max="60" step="0.5" value="4"/></div>
       <div class="modal-hint">从 @BotFather 获取 Bot Token。无需公网 IP，使用长轮询接收消息。</div>
     </div>
     <!-- 钉钉配置表单 -->
     <div id="im-dingtalk-f" style="display:none">
       <div class="field"><label>名称</label><input id="im-dt-name" placeholder="钉钉Bot"/></div>
-      <div class="field"><label>App Key</label><input id="im-dt-key" placeholder="dingXXXXXXXXX" autocomplete="off"/></div>
-      <div class="field"><label>App Secret</label><input id="im-dt-secret" type="password" placeholder="••••••••••" autocomplete="new-password"/></div>
+      <div class="field"><label>App Key</label><input id="im-dt-key" placeholder="dingXXXXXXXXX" data-i18n-ph="im_dt_key_ph" autocomplete="off"/></div>
+      <div class="field"><label>App Secret</label><input id="im-dt-secret" type="password" placeholder="••••••••••" data-i18n-ph="im_dt_secret_ph" autocomplete="new-password"/></div>
       <div class="field"><label>回复延迟(秒)</label><input id="im-dt-delay" type="number" min="0.5" max="60" step="0.5" value="4"/></div>
-      <div class="modal-hint">需安装 <code>pip install dingtalk-stream</code>。使用钉钉开放平台企业内部机器人凭证。</div>
+      <div class="modal-hint"><span data-i18n="im_dt_hint">需安装</span></div>
     </div>
     <!-- QQ 配置表单 (OneBot v11) -->
     <div id="im-qq-f" style="display:none">
-      <div class="field"><label>名称</label><input id="im-qq-name" placeholder="QQ Bot"/></div>
-      <div class="field"><label>WebSocket URL</label><input id="im-qq-ws" placeholder="ws://127.0.0.1:3001" autocomplete="off"/></div>
-      <div class="field"><label>Access Token（可选）</label><input id="im-qq-token" type="password" placeholder="留空则不验证" autocomplete="new-password"/></div>
+      <div class="field"><label data-i18n="im_qq_name_ph">名称</label><input id="im-qq-name" placeholder="QQ Bot" data-i18n-ph="im_qq_name_ph"/></div>
+      <div class="field"><label>WebSocket URL</label><input id="im-qq-ws" placeholder="ws://127.0.0.1:3001" data-i18n-ph="im_qq_ws_ph" autocomplete="off"/></div>
+      <div class="field"><label>Access Token（可选）</label><input id="im-qq-token" data-i18n-ph="im_qq_token_ph" type="password" placeholder="留空则不验证" autocomplete="new-password"/></div>
       <div class="field"><label>回复延迟(秒)</label><input id="im-qq-delay" type="number" min="0.5" max="60" step="0.5" value="4"/></div>
-      <div class="modal-hint">兼容 NapCatQQ / LLOneBot / go-cqhttp 等 OneBot v11 实现。</div>
+      <div class="modal-hint"><span data-i18n="im_qq_hint">兼容 NapCatQQ / LLOneBot / go-cqhttp 等 OneBot v11 实现。</span></div>
     </div>
     <!-- 企业微信配置表单 -->
     <div id="im-wework-f" style="display:none">
       <div class="field"><label>名称</label><input id="im-ww-name" placeholder="企微Bot"/></div>
-      <div class="field"><label>Corp ID（企业ID）</label><input id="im-ww-corpid" placeholder="ww00000000000000" autocomplete="off"/></div>
-      <div class="field"><label>Agent ID（应用ID）</label><input id="im-ww-agentid" placeholder="1000001" autocomplete="off"/></div>
-      <div class="field"><label>Corp Secret</label><input id="im-ww-secret" type="password" placeholder="••••••••••" autocomplete="new-password"/></div>
-      <div class="field"><label>Token（消息校验Token）</label><input id="im-ww-token" placeholder="随机字符串" autocomplete="off"/></div>
+      <div class="field"><label>Corp ID（企业ID）</label><input id="im-ww-corpid" placeholder="ww00000000000000" autocomplete="off" data-i18n-ph="im_ww_corpid_ph"/></div>
+      <div class="field"><label>Agent ID（应用ID）</label><input id="im-ww-agentid" placeholder="1000001" autocomplete="off" data-i18n-ph="im_ww_agentid_ph"/></div>
+      <div class="field"><label>Corp Secret</label><input id="im-ww-secret" type="password" placeholder="••••••••••" data-i18n-ph="im_ww_secret_ph" autocomplete="new-password"/></div>
+      <div class="field"><label>Token（消息校验Token）</label><input id="im-ww-token" placeholder="随机字符串" autocomplete="off" data-i18n-ph="im_ww_token_ph"/></div>
       <div class="field"><label>EncodingAESKey（43位）</label><input id="im-ww-aeskey" placeholder="43位随机字符串" autocomplete="off"/></div>
       <div class="field"><label>回复延迟(秒)</label><input id="im-ww-delay" type="number" min="0.5" max="60" step="0.5" value="4"/></div>
       <div class="modal-hint">Webhook回调地址将在创建后显示。需在企业微信管理后台 → 应用 → 接收消息 中填写该地址。</div>
     </div>
     <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:6px 0 12px;cursor:pointer">
-      <input type="checkbox" id="im-autostart" checked><span>创建后立即启动</span>
+      <input type="checkbox" id="im-autostart" checked><span data-i18n="im_create_auto">创建后立即启动</span>
     </label>
     <div class="modal-actions">
-      <button class="mbtn" onclick="closeNewImModal()">取消</button>
-      <button class="mbtn ok" onclick="submitNewImCard()">创建</button>
+      <button class="mbtn" onclick="closeNewImModal()" data-i18n="im_cancel">取消</button>
+      <button class="mbtn ok" onclick="submitNewImCard()" data-i18n="im_create_btn">创建</button>
     </div>
   </div>
 </div>
@@ -547,10 +547,10 @@
 <!-- Add / Edit server modal -->
 <div class="overlay" id="srv-modal" onclick="closeSrvModal(event)">
   <div class="modal" style="width:420px" onclick="event.stopPropagation()">
-    <h3 id="srv-modal-title">添加连接</h3>
+    <h3 id="srv-modal-title" data-i18n="srv_modal_title">添加连接</h3>
     <!-- Connection type -->
     <div class="conn-type-row">
-      <div class="conn-type-btn sel" id="ct-http"  onclick="selectConnType('http')">🌐 DruidClaw</div>
+      <div class="conn-type-btn sel" id="ct-http"  onclick="selectConnType('http')" data-i18n="srv_ct_http">🤖 Claude Code</div>
       <div class="conn-type-btn"     id="ct-local" onclick="selectConnType('local')">🖥 <span data-i18n="local_term">本地终端</span></div>
       <div class="conn-type-btn"     id="ct-ssh"   onclick="selectConnType('ssh')">🔒 <span data-i18n="ssh_term">SSH 终端</span></div>
     </div>
@@ -566,64 +566,64 @@
     <!-- HTTP fields -->
     <div id="conn-http-fields">
       <div class="field">
-        <label>显示名称（可选）</label>
-        <input id="m-label" placeholder="我的服务器" />
+        <label data-i18n="srv_display_name">显示名称（可选）</label>
+        <input id="m-label" placeholder="我的服务器" data-i18n-ph="srv_my_server" />
       </div>
       <div class="field">
-        <label>IP 地址</label>
+        <label data-i18n="srv_ip_lbl">IP 地址</label>
         <input id="m-host" placeholder="192.168.1.100" />
       </div>
       <div class="field">
-        <label>端口</label>
+        <label data-i18n="srv_port_lbl">端口</label>
         <input id="m-port" type="number" placeholder="19123" value="19123" />
       </div>
-      <div class="modal-hint" id="m-hint">填写远程 DruidClaw 服务器的地址和端口。</div>
+      <div class="modal-hint" id="m-hint" data-i18n="srv_hint">填写远程 Claude Code 服务器的地址和端口。</div>
     </div>
 
     <!-- SSH fields -->
     <div id="conn-ssh-fields" style="display:none">
       <!-- History -->
       <div id="ssh-history-wrap" style="display:none">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">历史连接</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px" data-i18n="srv_hist_lbl">历史连接</div>
         <div class="ssh-history-list" id="ssh-hist-list"></div>
-        <div class="ssh-divider">新建</div>
+        <div class="ssh-divider" data-i18n="srv_new_div">新建</div>
       </div>
       <div class="field">
-        <label>显示名称（可选）</label>
-        <input id="ssh-label" placeholder="生产服务器" />
+        <label data-i18n="srv_display_name">显示名称（可选）</label>
+        <input id="ssh-label" placeholder="生产服务器" data-i18n-ph="srv_ssh_label_ph" />
       </div>
       <div style="display:flex;gap:8px">
         <div class="field" style="flex:1">
-          <label>主机 / IP</label>
-          <input id="ssh-host" placeholder="192.168.1.100" />
+          <label data-i18n="srv_ssh_host_lbl">主机 / IP</label>
+          <input id="ssh-host" placeholder="192.168.1.100" data-i18n-ph="srv_ssh_host_lbl" />
         </div>
         <div class="field" style="width:70px">
-          <label>端口</label>
+          <label data-i18n="srv_ssh_port_lbl">端口</label>
           <input id="ssh-port" type="number" value="22" min="1" max="65535" />
         </div>
       </div>
       <div class="field">
-        <label>用户名</label>
-        <input id="ssh-user" placeholder="root" autocomplete="off" />
+        <label data-i18n="srv_ssh_user_lbl">用户名</label>
+        <input id="ssh-user" placeholder="root" autocomplete="off" data-i18n-ph="srv_ssh_user_lbl" />
       </div>
       <div class="field">
-        <label>密码（可选）</label>
+        <label data-i18n="srv_ssh_pass_lbl">密码（可选）</label>
         <div style="display:flex;align-items:center;gap:8px">
-          <input id="ssh-pass" type="password" placeholder="留空则用密钥" autocomplete="off" style="flex:1" />
+          <input id="ssh-pass" type="password" placeholder="留空则用密钥" autocomplete="off" style="flex:1" data-i18n-ph="srv_ssh_pass_ph" />
           <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);white-space:nowrap">
-            <input type="checkbox" id="ssh-save-pass" checked /> 保存密码
+            <input type="checkbox" id="ssh-save-pass" checked /> <span data-i18n="srv_ssh_save_pass">保存密码</span>
           </label>
         </div>
       </div>
       <div class="field">
-        <label>私钥路径（可选）</label>
-        <input id="ssh-key" placeholder="~/.ssh/id_rsa" />
+        <label data-i18n="srv_ssh_key_lbl">私钥路径（可选）</label>
+        <input id="ssh-key" placeholder="~/.ssh/id_rsa" data-i18n-ph="srv_ssh_key_lbl" />
       </div>
     </div>
 
     <div class="modal-actions">
-      <button class="mbtn" onclick="closeSrvModal()">取消</button>
-      <button class="mbtn ok" id="srv-modal-ok" onclick="commitServer()">连接</button>
+      <button class="mbtn" onclick="closeSrvModal()" data-i18n="srv_cancel">取消</button>
+      <button class="mbtn ok" id="srv-modal-ok" onclick="commitServer()" data-i18n="srv_connect_btn">连接</button>
     </div>
   </div>
 </div>
@@ -632,7 +632,7 @@
 <div class="overlay" id="cfg-modal" onclick="closeCfgModal(event)">
   <div class="modal" onclick="event.stopPropagation()" style="width:min(660px,96vw);max-height:85vh;display:flex;flex-direction:column">
     <h3 style="flex-shrink:0">⚙ 服务器设置</h3>
-    <!-- Sub-tabs -->
+    <!-- Tab labels -->
     <div class="sp-tabs" style="margin-bottom:12px;flex-shrink:0">
       <div class="sp-tab active" id="cfg-tab-basic" onclick="cfgTab('basic')">⚙ 基本设置</div>
       <div class="sp-tab"        id="cfg-tab-files" onclick="cfgTab('files')">📁 配置文件参考</div>
@@ -640,95 +640,95 @@
     <!-- Pane: basic settings -->
     <div id="cfg-pane-basic">
       <div class="field">
-        <label>监听 IP</label>
+        <label data-i18n="cfg_listen_ip">监听 IP</label>
         <input id="c-host" disabled style="opacity:.5;cursor:not-allowed" />
       </div>
       <div class="field">
-        <label>端口</label>
+        <label data-i18n="cfg_port">端口</label>
         <input id="c-port" type="number" disabled style="opacity:.5;cursor:not-allowed" />
       </div>
-      <div class="modal-hint" style="color:var(--muted)">
-        监听地址和端口由启动参数决定，如需修改请重启服务时指定 --host 和 --port 参数。
+      <div class="modal-hint" style="color:var(--muted)" data-i18n="cfg_restart_hint">
+        ⚠ 修改并重启后浏览器将自动跳转到新地址。
       </div>
       <div class="modal-actions" style="margin-top:14px">
-        <button class="mbtn" onclick="closeCfgModal()">关闭</button>
+        <button class="mbtn" onclick="closeCfgModal()" data-i18n="cfg_close_btn">关闭</button>
       </div>
     </div>
     <!-- Pane: config files reference -->
     <div id="cfg-pane-files" style="display:none;overflow-y:auto;flex:1;font-size:12px;line-height:1.6">
 
-      <div class="cfg-ref-section">环境变量</div>
+      <div class="cfg-ref-section" data-i18n="cfg_env_vars">环境变量</div>
       <table class="cfg-ref-table">
-        <thead><tr><th>变量</th><th>默认值</th><th>说明</th></tr></thead>
+        <thead><tr><th data-i18n="cfg_col_var">变量</th><th data-i18n="cfg_col_default">默认值</th><th data-i18n="cfg_col_desc">说明</th></tr></thead>
         <tbody>
-          <tr><td><code>DRUIDCLAW_TOKEN</code></td><td><code>cc</code></td><td>Web 访问密码（<code>--passwd</code> 可覆盖）</td></tr>
-          <tr><td><code>DRUIDCLAW_RUN_DIR</code></td><td><code>~/.druidclaw/run</code></td><td>运行时数据目录（所有 JSON 配置文件所在位置）</td></tr>
-          <tr><td><code>DRUIDCLAW_WEB_HOST</code></td><td><code>0.0.0.0</code></td><td>绑定地址（启动时写入，优先于 config.json）</td></tr>
-          <tr><td><code>DRUIDCLAW_WEB_PORT</code></td><td><code>19123</code></td><td>监听端口（启动时写入，优先于 config.json）</td></tr>
+          <tr><td><code>DRUIDCLAW_TOKEN</code></td><td><code>cc</code></td><td data-i18n="cfg_druidclaw_token">Web 访问密码（<code>--passwd</code> 可覆盖）</td></tr>
+          <tr><td><code>DRUIDCLAW_RUN_DIR</code></td><td><code>~/.druidclaw/run</code></td><td data-i18n="cfg_druidclaw_run_dir">运行时数据目录（所有 JSON 配置文件所在位置）</td></tr>
+          <tr><td><code>DRUIDCLAW_WEB_HOST</code></td><td><code>0.0.0.0</code></td><td data-i18n="cfg_druidclaw_web_host">绑定地址（启动时写入，优先于 config.json）</td></tr>
+          <tr><td><code>DRUIDCLAW_WEB_PORT</code></td><td><code>19123</code></td><td data-i18n="cfg_druidclaw_web_port">监听端口（启动时写入，优先于 config.json）</td></tr>
         </tbody>
       </table>
 
-      <div class="cfg-ref-section">启动参数 <span style="font-weight:400;opacity:.7">python -m druidclaw.web / start.sh</span></div>
+      <div class="cfg-ref-section"><span data-i18n="cfg_startup_args">启动参数</span> <span style="font-weight:400;opacity:.7">python -m druidclaw.web / start.sh</span></div>
       <table class="cfg-ref-table">
-        <thead><tr><th>参数</th><th>默认值</th><th>说明</th></tr></thead>
+        <thead><tr><th data-i18n="cfg_col_param">参数</th><th data-i18n="cfg_col_default">默认值</th><th data-i18n="cfg_col_desc">说明</th></tr></thead>
         <tbody>
-          <tr><td><code>--host</code></td><td>读 config.json</td><td>绑定地址，覆盖已保存配置</td></tr>
-          <tr><td><code>--port</code></td><td>读 config.json</td><td>监听端口，覆盖已保存配置</td></tr>
-          <tr><td><code>--passwd</code></td><td>读 DRUIDCLAW_TOKEN</td><td>访问密码，覆盖 DRUIDCLAW_TOKEN 环境变量</td></tr>
-          <tr><td><code>--workdir</code></td><td><code>.</code></td><td>新建会话的默认工作目录</td></tr>
-          <tr><td><code>--reload</code></td><td>false</td><td>代码变更时自动重载（开发用）</td></tr>
+          <tr><td><code>--host</code></td><td data-i18n="cfg_read_config">读 config.json</td><td data-i18n="cfg_host_desc">绑定地址，覆盖已保存配置</td></tr>
+          <tr><td><code>--port</code></td><td data-i18n="cfg_read_config">读 config.json</td><td data-i18n="cfg_port_desc">监听端口，覆盖已保存配置</td></tr>
+          <tr><td><code>--passwd</code></td><td data-i18n="cfg_read_env">读 DRUIDCLAW_TOKEN</td><td data-i18n="cfg_passwd_desc">访问密码，覆盖 DRUIDCLAW_TOKEN 环境变量</td></tr>
+          <tr><td><code>--workdir</code></td><td><code>.</code></td><td data-i18n="cfg_workdir_desc">新建会话的默认工作目录</td></tr>
+          <tr><td><code>--reload</code></td><td>false</td><td data-i18n="cfg_reload_desc">代码变更时自动重载（开发用）</td></tr>
         </tbody>
       </table>
 
-      <div class="cfg-ref-section">运行时配置文件 <span style="font-weight:400;opacity:.7">$DRUIDCLAW_RUN_DIR/</span></div>
+      <div class="cfg-ref-section"><span data-i18n="cfg_runtime_config">运行时配置文件</span> <span style="font-weight:400;opacity:.7">$DRUIDCLAW_RUN_DIR/</span></div>
       <table class="cfg-ref-table">
-        <thead><tr><th>文件</th><th>用途</th><th>关键字段</th></tr></thead>
+        <thead><tr><th data-i18n="cfg_col_file">文件</th><th data-i18n="cfg_col_purpose">用途</th><th data-i18n="cfg_col_fields">关键字段</th></tr></thead>
         <tbody>
-          <tr><td><code>config.json</code></td><td>Web 服务器绑定地址/端口</td><td><code>host</code>（默认 <code>0.0.0.0</code>）、<code>port</code>（默认 <code>19123</code>）</td></tr>
-          <tr><td><code>cards.json</code></td><td>所有 Card 配置，重启后自动恢复</td><td>见下方 Card 字段说明</td></tr>
-          <tr><td><code>feishu.json</code></td><td>飞书遗留全局凭证（兼容旧版）</td><td><code>app_id</code>、<code>app_secret</code></td></tr>
-          <tr><td><code>feishu_bridge.json</code></td><td>IM Bridge 通用配置</td><td><code>reply_delay</code>（默认 <code>2.0</code> 秒）</td></tr>
-          <tr><td><code>tasks.json</code></td><td>定时任务列表</td><td><code>name</code>、<code>session</code>、<code>prompt</code>、<code>interval</code> / <code>cron</code></td></tr>
-          <tr><td><code>ssh_history.json</code></td><td>SSH 连接历史（不含密码）</td><td><code>host</code>、<code>port</code>、<code>username</code>、<code>key_path</code></td></tr>
+          <tr><td><code>config.json</code></td><td data-i18n="cfg_config_json">Web 服务器绑定地址/端口</td><td><code>host</code>（默认 <code>0.0.0.0</code>）、<code>port</code>（默认 <code>19123</code>）</td></tr>
+          <tr><td><code>cards.json</code></td><td data-i18n="cfg_cards_json">所有 Card 配置，重启后自动恢复</td><td data-i18n="cfg_cards_fields">见下方 Card 字段说明</td></tr>
+          <tr><td><code>feishu.json</code></td><td data-i18n="cfg_feishu_json">飞书遗留全局凭证（兼容旧版）</td><td><code>app_id</code>、<code>app_secret</code></td></tr>
+          <tr><td><code>feishu_bridge.json</code></td><td data-i18n="cfg_bridge_json">IM Bridge 通用配置</td><td><code>reply_delay</code>（默认 <code>2.0</code> 秒）</td></tr>
+          <tr><td><code>tasks.json</code></td><td data-i18n="cfg_tasks_json">定时任务列表</td><td><code>name</code>、<code>session</code>、<code>prompt</code>、<code>interval</code> / <code>cron</code></td></tr>
+          <tr><td><code>ssh_history.json</code></td><td data-i18n="cfg_ssh_hist_json">SSH 连接历史（不含密码）</td><td><code>host</code>、<code>port</code>、<code>username</code>、<code>key_path</code></td></tr>
         </tbody>
       </table>
 
-      <div class="cfg-ref-section">cards.json — Card 字段说明</div>
+      <div class="cfg-ref-section" data-i18n="cfg_card_fields">cards.json — Card 字段说明</div>
       <table class="cfg-ref-table">
-        <thead><tr><th>字段</th><th>适用类型</th><th>说明</th></tr></thead>
+        <thead><tr><th data-i18n="cfg_col_field">字段</th><th data-i18n="cfg_col_app_type">适用类型</th><th data-i18n="cfg_col_desc">说明</th></tr></thead>
         <tbody>
-          <tr><td><code>id</code></td><td>全部</td><td>自动生成的 8 位 hex ID</td></tr>
-          <tr><td><code>type</code></td><td>全部</td><td><code>claude</code> / <code>feishu</code> / <code>telegram</code> / <code>dingtalk</code> / <code>qq</code> / <code>wework</code></td></tr>
-          <tr><td><code>name</code></td><td>全部</td><td>显示名称</td></tr>
-          <tr><td><code>workdir</code></td><td>全部</td><td>工作目录（默认 <code>.</code>）</td></tr>
-          <tr><td><code>auto_start</code></td><td>全部</td><td>启动时自动运行（默认 <code>true</code>）</td></tr>
-          <tr><td><code>auto_approve</code></td><td>IM 类</td><td>自动通过权限提示，跳过确认（默认 <code>false</code>）</td></tr>
-          <tr><td><code>reply_delay</code></td><td>IM 类</td><td>回复延迟秒数，范围 0.5–60（默认 <code>2.0</code>）</td></tr>
-          <tr><td><code>args</code></td><td>claude</td><td>附加 Claude 启动参数数组</td></tr>
-          <tr><td><code>app_id</code> / <code>app_secret</code></td><td>feishu / dingtalk</td><td>飞书 App ID + Secret；钉钉 App Key + Secret</td></tr>
-          <tr><td><code>token</code></td><td>telegram</td><td>Telegram Bot Token</td></tr>
-          <tr><td><code>ws_url</code> / <code>access_token</code></td><td>qq</td><td>OneBot v11 WebSocket 地址及可选鉴权 Token</td></tr>
-          <tr><td><code>corp_id</code> / <code>agent_id</code> / <code>corp_secret</code></td><td>wework</td><td>企业微信企业 ID、应用 ID、应用 Secret</td></tr>
-          <tr><td><code>wework_token</code> / <code>encoding_aes_key</code></td><td>wework</td><td>消息校验 Token 及 43 位 AES Key</td></tr>
+          <tr><td><code>id</code></td><td data-i18n="cfg_all_types">全部</td><td data-i18n="cfg_field_id">自动生成的 8 位 hex ID</td></tr>
+          <tr><td><code>type</code></td><td data-i18n="cfg_all_types">全部</td><td data-i18n="cfg_field_type"><code>claude</code> / <code>feishu</code> / <code>telegram</code> / <code>dingtalk</code> / <code>qq</code> / <code>wework</code></td></tr>
+          <tr><td><code>name</code></td><td data-i18n="cfg_all_types">全部</td><td data-i18n="cfg_field_name">显示名称</td></tr>
+          <tr><td><code>workdir</code></td><td data-i18n="cfg_all_types">全部</td><td data-i18n="cfg_field_workdir">工作目录（默认 <code>.</code>）</td></tr>
+          <tr><td><code>auto_start</code></td><td data-i18n="cfg_all_types">全部</td><td data-i18n="cfg_field_auto_start">启动时自动运行（默认 <code>true</code>）</td></tr>
+          <tr><td><code>auto_approve</code></td><td data-i18n="cfg_im_types">IM 类</td><td data-i18n="cfg_field_auto_approve">自动通过权限提示，跳过确认（默认 <code>false</code>）</td></tr>
+          <tr><td><code>reply_delay</code></td><td data-i18n="cfg_im_types">IM 类</td><td data-i18n="cfg_field_reply_delay">回复延迟秒数，范围 0.5–60（默认 <code>2.0</code>）</td></tr>
+          <tr><td><code>args</code></td><td>claude</td><td data-i18n="cfg_field_args">附加 Claude 启动参数数组</td></tr>
+          <tr><td><code>app_id</code> / <code>app_secret</code></td><td>feishu / dingtalk</td><td data-i18n="cfg_field_app_cred">飞书 App ID + Secret；钉钉 App Key + Secret</td></tr>
+          <tr><td><code>token</code></td><td>telegram</td><td data-i18n="cfg_field_tg_token">Telegram Bot Token</td></tr>
+          <tr><td><code>ws_url</code> / <code>access_token</code></td><td>qq</td><td data-i18n="cfg_field_qq_ws">OneBot v11 WebSocket 地址及可选鉴权 Token</td></tr>
+          <tr><td><code>corp_id</code> / <code>agent_id</code> / <code>corp_secret</code></td><td>wework</td><td data-i18n="cfg_field_ww_cred">企业微信企业 ID、应用 ID、应用 Secret</td></tr>
+          <tr><td><code>wework_token</code> / <code>encoding_aes_key</code></td><td>wework</td><td data-i18n="cfg_field_ww_token">消息校验 Token 及 43 位 AES Key</td></tr>
         </tbody>
       </table>
 
-      <div class="cfg-ref-section">其他运行时路径</div>
+      <div class="cfg-ref-section" data-i18n="cfg_other_paths">其他运行时路径</div>
       <table class="cfg-ref-table">
-        <thead><tr><th>路径</th><th>说明</th></tr></thead>
+        <thead><tr><th data-i18n="cfg_col_path">路径</th><th data-i18n="cfg_col_desc">说明</th></tr></thead>
         <tbody>
-          <tr><td><code>~/.druidclaw/logs/</code></td><td>PTY 会话日志（<code>.log</code> 文本 / <code>.raw</code> 二进制录像）</td></tr>
-          <tr><td><code>~/.druidclaw/run/daemon.sock</code></td><td>Unix socket（daemon 模式 IPC）</td></tr>
-          <tr><td><code>~/.druidclaw/run/daemon.pid</code></td><td>daemon 进程 PID 文件</td></tr>
-          <tr><td><code>~/.claude/skills/*/SKILL.md</code></td><td>Skills 侧边栏数据来源</td></tr>
-          <tr><td><code>/tmp/druidclaw_{name}_{ts}.log</code></td><td>SSH 会话临时日志</td></tr>
+          <tr><td><code>~/.druidclaw/logs/</code></td><td data-i18n="cfg_path_logs">PTY 会话日志（<code>.log</code> 文本 / <code>.raw</code> 二进制录像）</td></tr>
+          <tr><td><code>~/.druidclaw/run/daemon.sock</code></td><td data-i18n="cfg_path_socket">Unix socket（daemon 模式 IPC）</td></tr>
+          <tr><td><code>~/.druidclaw/run/daemon.pid</code></td><td data-i18n="cfg_path_pid">daemon 进程 PID 文件</td></tr>
+          <tr><td><code>~/.claude/skills/*/SKILL.md</code></td><td data-i18n="cfg_path_skills">Skills 侧边栏数据来源</td></tr>
+          <tr><td><code>/tmp/druidclaw_{name}_{ts}.log</code></td><td data-i18n="cfg_path_ssh_log">SSH 会话临时日志</td></tr>
         </tbody>
       </table>
       <div style="height:8px"></div>
     </div><!-- /cfg-pane-files -->
 
     <div class="modal-actions" id="cfg-files-close" style="display:none;flex-shrink:0;padding-top:8px;border-top:1px solid var(--border)">
-      <button class="mbtn" onclick="closeCfgModal()">关闭</button>
+      <button class="mbtn" onclick="closeCfgModal()" data-i18n="cfg_close_btn">关闭</button>
     </div>
   </div>
 </div>
@@ -737,7 +737,7 @@
 <div class="overlay" id="feishu-overlay" onclick="closeFeishuModal(event)">
   <div class="modal feishu-modal" onclick="event.stopPropagation()">
     <h3>🔔 飞书机器人配置</h3>
-    <div class="f-section">应用凭证</div>
+    <div class="f-section" data-i18n="f_section_cred">应用凭证</div>
     <div class="field">
       <label>App ID</label>
       <input id="f-appid" placeholder="cli_xxxxxxxxxx" autocomplete="off"/>
@@ -747,30 +747,30 @@
       <input id="f-secret" type="password" placeholder="••••••••••••••••" autocomplete="new-password"/>
     </div>
     <div class="feishu-status-row">
-      <span class="f-section" style="margin:0">连接状态</span>
-      <span id="f-status-badge" class="badge badge-dead">未连接</span>
+      <span class="f-section" style="margin:0" data-i18n="f_section_status">连接状态</span>
+      <span id="f-status-badge" class="badge badge-dead" data-i18n="f_status_disconnected">未连接</span>
       <span id="f-status-detail" style="font-size:11px;color:var(--muted)"></span>
       <div class="spacer"></div>
-      <button class="mbtn" id="f-disconnect-btn" onclick="feishuDisconnect()" style="display:none">断开</button>
-      <button class="mbtn ok" id="f-connect-btn" onclick="feishuSaveAndConnect()">保存并连接</button>
+      <button class="mbtn" id="f-disconnect-btn" onclick="feishuDisconnect()" style="display:none" data-i18n="f_disconnect_btn">断开</button>
+      <button class="mbtn ok" id="f-connect-btn" onclick="feishuSaveAndConnect()" data-i18n="f_connect_btn">保存并连接</button>
     </div>
     <!-- Bridge config -->
-    <div class="f-section" style="margin-top:6px">消息桥接设置</div>
+    <div class="f-section" style="margin-top:6px" data-i18n="f_section_bridge">消息桥接设置</div>
     <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:4px">
       <div class="field" style="width:120px;margin:0">
         <label>回复延迟(s)</label>
         <input id="f-bridge-delay" type="number" min="0.5" max="60" step="0.5"
                value="4" style="width:100%" oninput="bridgeSave()"/>
       </div>
-      <span style="font-size:11px;color:var(--muted);align-self:flex-end;padding-bottom:6px">连接时自动创建 Claude 会话，断开时自动关闭</span>
+      <span style="font-size:11px;color:var(--muted);align-self:flex-end;padding-bottom:6px" data-i18n="f_bridge_hint">连接时自动创建 Claude 会话，断开时自动关闭</span>
     </div>
-    <div class="f-section" style="margin-top:6px">最近事件</div>
+    <div class="f-section" style="margin-top:6px" data-i18n="f_section_events">最近事件</div>
     <div class="event-log" id="f-event-log">
-      <div class="ev-empty">暂无事件</div>
+      <div class="ev-empty" data-i18n="f_no_events">暂无事件</div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
-      <span style="font-size:11px;color:var(--muted)">事件将持续更新</span>
-      <button class="mbtn" onclick="closeFeishuModal()">关闭</button>
+      <span style="font-size:11px;color:var(--muted)" data-i18n="f_events_update">事件将持续更新</span>
+      <button class="mbtn" onclick="closeFeishuModal()" data-i18n="f_close">关闭</button>
     </div>
   </div>
 </div>
@@ -778,12 +778,16 @@
 <!-- Restart overlay -->
 <div class="spin-overlay" id="spin-overlay">
   <div class="spinner"></div>
-  <h3>服务器重启中...</h3>
-  <p id="spin-msg">请稍候</p>
+  <h3 data-i18n="restart_msg">服务器重启中...</h3>
+  <p id="spin-msg" data-i18n="spin_wait">请稍候</p>
 </div>
 
 <div id="toast"></div>
 
+<script src="/static/connections.js"></script>
+<script src="/static/local_terminal.js"></script>
+<script src="/static/ssh_terminal.js"></script>
+<script src="/static/claude_session.js"></script>
 <script src="/static/main.js"></script>
 </body>
 </html>

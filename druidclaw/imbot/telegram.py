@@ -7,12 +7,13 @@ Get a bot token from @BotFather via /newbot.
 Interface is identical to FeishuBot so _ReplyCollector and bridge
 handlers work without modification.
 """
+from collections import deque
 import json
 import logging
 import threading
 import time
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, Optional, Deque
 
 import httpx
 
@@ -38,8 +39,10 @@ class TelegramBot:
         self._connected_at: Optional[str] = None
         self._reconnect_count = 0
 
-        self._events: list[dict] = []
+        # Use deque for O(1) append and automatic maxlen management
+        self._events: Deque[dict] = deque(maxlen=MAX_EVENTS)
         self._events_lock = threading.Lock()
+        self._event_index = 0  # Monotonic index counter
 
         self._handlers: list[Callable] = []
         self._connect_handlers: list[Callable] = []
@@ -80,7 +83,7 @@ class TelegramBot:
 
     def get_status(self) -> dict:
         with self._events_lock:
-            recent = list(self._events[-50:])
+            recent = list(self._events)[-50:] if len(self._events) > 50 else list(self._events)
         return {
             "status":          self._status,
             "error":           self._error,
@@ -92,9 +95,14 @@ class TelegramBot:
 
     def get_events(self, after_index: int = 0) -> dict:
         with self._events_lock:
-            total = len(self._events)
-            events = self._events[after_index:] if after_index < total else []
-        return {"total": total, "events": list(events)}
+            total = self._event_index
+            events_list = list(self._events)
+            if after_index < total and events_list:
+                start = max(0, len(events_list) - (total - after_index))
+                events = events_list[start:]
+            else:
+                events = []
+        return {"total": total, "events": events}
 
     def send_message(self, chat_id: str, text: str,
                      receive_id_type: str = "chat_id") -> bool:
@@ -123,27 +131,27 @@ class TelegramBot:
     def _add_reply_event(self, text: str, chat_id: str):
         preview = text[:120].replace('\n', ' ')
         entry = {
-            "index":   0,
+            "index":   self._event_index,
             "time":    datetime.now().strftime("%H:%M:%S"),
             "type":    "reply.sent",
             "summary": f"→ {chat_id}: {preview}",
             "raw":     {"chat_id": chat_id, "text": text[:300]},
         }
         with self._events_lock:
-            entry["index"] = len(self._events)
+            self._event_index += 1
             self._events.append(entry)
         logger.info(f"Claude→Telegram [{chat_id}]: {preview[:60]}")
 
     def _add_system_event(self, etype: str, summary: str):
         entry = {
-            "index":   0,
+            "index":   self._event_index,
             "time":    datetime.now().strftime("%H:%M:%S"),
             "type":    f"system.{etype}",
             "summary": summary,
             "raw":     {},
         }
         with self._events_lock:
-            entry["index"] = len(self._events)
+            self._event_index += 1
             self._events.append(entry)
 
     def _record_update(self, update: dict):
@@ -157,17 +165,15 @@ class TelegramBot:
         username = sender.get("username") or sender.get("first_name", "?")
         summary = f"{username}@{chat_id}: {text[:100]}"
         entry = {
-            "index":   0,
+            "index":   self._event_index,
             "time":    datetime.now().strftime("%H:%M:%S"),
             "type":    "message",
             "summary": summary,
             "raw":     update,
         }
         with self._events_lock:
-            entry["index"] = len(self._events)
-            self._events.append(entry)
-            if len(self._events) > MAX_EVENTS:
-                self._events = self._events[-MAX_EVENTS:]
+            self._event_index += 1
+            self._events.append(entry)  # deque automatically drops oldest when full
         logger.info(f"Telegram message: {summary}")
 
     # ── Thread ──────────────────────────────────────────────── #

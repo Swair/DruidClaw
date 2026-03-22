@@ -1,18 +1,8 @@
 
 // ============================================================
 //  Server connections
-//  Each entry: { id, label, host, port, status, sessions, activeSession, terms }
-//  status: 'ok' | 'err' | 'wait'
+//  (global state defined in connections.js)
 // ============================================================
-let servers = [];       // ordered list
-let activeSrvId = null;
-let _srvIdSeq = 0;
-
-// Session persistence
-const SESSION_STORAGE_KEY = 'druidclaw_sessions';
-
-function srvById(id) { return servers.find(s => s.id === id); }
-function activeSrv() { return srvById(activeSrvId); }
 
 // base URL for REST calls to a server
 function srvBase(srv) {
@@ -26,58 +16,6 @@ function srvBase(srv) {
 function wsUrl(srv, name) {
   const proto = srv.host.startsWith('https') ? 'wss:' : 'ws:';
   return `${proto}//${srv.host}:${srv.port}/ws/${encodeURIComponent(name)}`;
-}
-
-// ── Connection type selector in Add modal ─────────────────
-let _connType = 'http';
-
-function selectConnType(type) {
-  _connType = type;
-  document.getElementById('ct-http').classList.toggle('sel',  type==='http');
-  document.getElementById('ct-local').classList.toggle('sel', type==='local');
-  document.getElementById('ct-ssh').classList.toggle('sel',   type==='ssh');
-  document.getElementById('conn-http-fields').style.display  = type==='http'  ? '' : 'none';
-  const localFields = document.getElementById('conn-local-fields');
-  if (localFields) localFields.style.display = type==='local' ? '' : 'none';
-  document.getElementById('conn-ssh-fields').style.display   = type==='ssh'   ? '' : 'none';
-  if (type === 'ssh') loadSshHistory();
-}
-
-async function loadSshHistory() {
-  try {
-    const r = await fetch('/api/ssh/history');
-    const d = await r.json();
-    const wrap = document.getElementById('ssh-history-wrap');
-    const list = document.getElementById('ssh-hist-list');
-    if (!d.history || !d.history.length) { wrap.style.display = 'none'; return; }
-    wrap.style.display = '';
-    list.innerHTML = '';
-    d.history.forEach((h, idx) => {
-      const row = document.createElement('div');
-      row.className = 'ssh-hist-item';
-      const hasPass = h.password ? '🔑' : '';
-      row.innerHTML =
-        `<span class="sh-label">${esc(h.label||h.username+'@'+h.host)} ${hasPass}</span>` +
-        `<span class="sh-addr">${esc(h.username)}@${esc(h.host)}:${h.port||22}</span>` +
-        `<span class="sh-del" onclick="event.stopPropagation();deleteSshHistory(${idx})" title="删除">✕</span>`;
-      row.addEventListener('click', () => fillSshForm(h));
-      list.appendChild(row);
-    });
-  } catch (e) { console.error('Failed to load SSH history:', e); }
-}
-
-function fillSshForm(h) {
-  document.getElementById('ssh-label').value = h.label || '';
-  document.getElementById('ssh-host').value = h.host || '';
-  document.getElementById('ssh-port').value = h.port || 22;
-  document.getElementById('ssh-user').value = h.username || '';
-  document.getElementById('ssh-pass').value = h.password || '';
-  document.getElementById('ssh-key').value = h.key_path || '';
-}
-
-async function deleteSshHistory(idx) {
-  await fetch(`/api/ssh/history/${idx}`, { method: 'DELETE' });
-  loadSshHistory();
 }
 
 // Override openAddServer to reset type
@@ -98,470 +36,23 @@ function openAddServer() {
 }
 
 // ── Add / switch server ──────────────────────────────────
-async function addServer(host, port, label) {
-  const id = `srv${++_srvIdSeq}`;
-  const srv = {
-    id, label: label || `${host}:${port}`,
-    host, port: parseInt(port),
-    status: 'wait',
-    type: 'druidclaw',  // DruidClaw 服务器类型
-    sessions: {},    // name → { ws, term, fitAddon, status, pid }
-    activeSession: null,
-    terms: {},
-  };
-  servers.push(srv);
-  renderServerBar();
-  await switchServer(id);
-  return id;
-}
-
-async function switchServer(id) {
-  activeSrvId = id;
-  renderServerBar();
-  renderSessionList();
-  restoreTerminal();
-  renderCards();  // 更新左侧卡片列表
-  const srv = srvById(id);
-  if (!srv || srv.type === 'local' || srv.type === 'ssh') return;  // terminal tabs skip HTTP probe
-  try {
-    const r = await fetch(`${srvBase(srv)}/api/sessions`, { signal: AbortSignal.timeout(3000) });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
-    srv.status = 'ok';
-    renderServerBar();
-    renderSessionList();
-    renderCards();  // 更新左侧卡片列表
-  } catch (e) {
-    srv.status = 'err';
-    renderServerBar();
-    toast(`无法连接到 ${srv.label}: ${e.message}`, true);
-  }
-}
-
-function removeServer(id) {
-  const srv = srvById(id);
-  if (!srv) return;
-  // Dispose all sessions
-  for (const s of Object.values(srv.sessions)) {
-    if (s.ws) s.ws.close();
-    if (s.term) s.term.dispose();
-  }
-  servers = servers.filter(s => s.id !== id);
-  if (activeSrvId === id) {
-    activeSrvId = servers.length ? servers[servers.length - 1].id : null;
-  }
-  renderServerBar();
-  renderSessionList();
-  restoreTerminal();
-  saveSessionsToStorage();
-}
+// Server management functions moved to connections.js
 
 // ── Session persistence ────────────────────────────────────
-function saveSessionsToStorage() {
-  try {
-    const sessionData = servers.map(srv => ({
-      id: srv.id,
-      label: srv.label,
-      host: srv.host,
-      port: srv.port,
-      type: srv.type,
-      activeSession: srv.activeSession,
-      sessions: Object.keys(srv.sessions).map(name => {
-        const sess = srv.sessions[name];
-        return {
-          name,
-          status: sess.status,
-          pid: sess.pid,
-          params: sess.params,  // SSH connection params
-          shell: sess.shell  // Local terminal shell override
-        };
-      })
-    }));
-    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
-    console.log('[DEBUG] Saved sessions:', sessionData);
-  } catch (e) {
-    console.warn('Failed to save sessions:', e);
-  }
-}
-
-async function restoreSessionsFromStorage() {
-  try {
-    const data = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    console.log('[DEBUG] Restoring sessions, data:', data);
-    if (!data) return false;
-
-    const sessionData = JSON.parse(data);
-    if (!sessionData || sessionData.length === 0) return false;
-
-    // 清空现有服务器列表，避免重复
-    servers = [];
-    activeSrvId = null;
-
-    let lastSrv = null;
-    for (const srvData of sessionData) {
-      // Recreate server
-      const srvId = srvData.id;
-      const srv = {
-        id: srvId,
-        label: srvData.label,
-        host: srvData.host,
-        port: srvData.port,
-        type: srvData.type || 'druidclaw',  // 默认为 druidclaw，只有终端类型会明确设置
-        status: 'ok',
-        sessions: {},
-        activeSession: srvData.activeSession,
-        terms: {}
-      };
-
-      servers.push(srv);
-      lastSrv = srv;
-
-      // Reconnect sessions (SSH or local terminal)
-      for (const sessData of srvData.sessions) {
-        if (sessData.name) {
-          srv.sessions[sessData.name] = {
-            ws: null,
-            term: null,
-            fitAddon: null,
-            status: 'reconnecting',
-            pid: null,
-            lastOutputAt: 0,
-            params: sessData.params || {}
-          };
-          // Reconnect based on session type
-          if (sessData.params && sessData.params.host) {
-            // SSH session
-            openSshTerminal(srv, sessData.name, sessData.params || {}, null);
-          } else if (srvData.type === 'local') {
-            // Local terminal session - restore with saved shell
-            openLocalTerminal(srv, sessData.name, sessData.shell || null, null);
-          }
-        }
-      }
-    }
-
-    if (servers.length > 0) {
-      activeSrvId = servers[servers.length - 1].id;
-      renderServerBar();
-      renderSessionList();
-
-      // Wait a bit for sessions to be initialized, then render cards and restore the view
-      setTimeout(() => {
-        renderCards();
-        renderSessionList();
-        updateToolbar();
-        restoreTerminal();
-        if (lastSrv && lastSrv.activeSession) {
-          console.log('[DEBUG] Restored terminal view for:', lastSrv.activeSession);
-        }
-      }, 500);
-
-      toast(t('toast_restored') + ` ${servers.length} ` + t('session_list'));
-      return true;
-    }
-  } catch (e) {
-    console.error('Failed to restore sessions:', e);
-  }
-  return false;
-}
+// Session persistence functions moved to connections.js
 
 // ── Server bar render ────────────────────────────────────
-function renderServerBar() {
-  const bar = document.getElementById('server-bar');
-  // Keep the "+" button
-  const addBtn = bar.querySelector('.srv-add');
-  bar.innerHTML = '';
-  for (const srv of servers) {
-    const tab = document.createElement('div');
-    tab.className = 'srv-tab' + (srv.id === activeSrvId ? ' active' : '');
-    const dotCls = (srv.type === 'local' || srv.type === 'ssh') ? 'dot dot-busy'
-                 : srv.status === 'ok'  ? 'dot dot-ok'
-                 : srv.status === 'err' ? 'dot dot-err' : 'dot dot-wait';
-    tab.innerHTML =
-      `<span class="${dotCls}"></span>` +
-      `<span class="lbl" onclick="switchServer('${srv.id}')">${srv.label}</span>` +
-      `<span class="x" onclick="event.stopPropagation();removeServer('${srv.id}')">✕</span>`;
-    bar.appendChild(tab);
-  }
-  bar.appendChild(addBtn);
-}
+// renderServerBar moved to connections.js
 
 // ── Add-server modal ─────────────────────────────────────
-let _srvEditId = null;  // null = add new
-
-function closeSrvModal(ev) {
-  if (ev && ev.target !== document.getElementById('srv-modal')) return;
-  document.getElementById('srv-modal').classList.remove('show');
-}
-
-async function commitServer() {
-  if (_connType === 'ssh') {
-    await connectSSH();
-    return;
-  }
-  if (_connType === 'local') {
-    await connectLocalShell();
-    return;
-  }
-  // HTTP CC Manager connection (original logic)
-  const label = document.getElementById('m-label').value.trim();
-  const host  = document.getElementById('m-host').value.trim();
-  const port  = parseInt(document.getElementById('m-port').value) || 19123;
-  if (!host) { toast(t('toast_fill_ip'), true); return; }
-  closeSrvModal();
-  await addServer(host, port, label || `${host}:${port}`);
-}
-
-// 创建新的本地终端会话（在左侧新增卡片）
-async function addLocalSessionToCurrentServer() {
-  // 查找是否已有本地终端服务器
-  let localSrv = servers.find(s => s.type === 'local');
-  if (!localSrv) {
-    // 创建一个新的本地终端服务器
-    const srvId = `term${++_srvIdSeq}`;
-    localSrv = { id:srvId, label:'🖥 本地', type:'local',
-                  status:'ok', sessions:{}, activeSession:null, terms:{} };
-    servers.push(localSrv);
-    activeSrvId = srvId;
-    renderServerBar();
-    renderCards();
-  } else {
-    // 切换到本地终端服务器
-    activeSrvId = localSrv.id;
-    renderServerBar();
-    renderCards();
-  }
-  const sessName = `local_${Date.now()%10000}`;
-  await openLocalTerminal(localSrv, sessName, '', null);
-  // 保存会话到 sessionStorage
-  saveSessionsToStorage();
-}
-
-// 旧函数保留用于首次创建（从模态框）
-async function connectLocalShell() {
-  const shellOverride = document.getElementById('local-shell')?.value.trim() || '';
-  closeSrvModal();
-
-  // 查找是否已有本地终端服务器
-  let localSrv = servers.find(s => s.type === 'local');
-  const sessName = `local_${Date.now()%10000}`;
-  if (!localSrv) {
-    // 创建一个新的本地终端服务器
-    const srvId = `term${++_srvIdSeq}`;
-    localSrv = { id:srvId, label:'🖥 本地', type:'local',
-                  status:'ok', sessions:{}, activeSession:null, terms:{} };
-    servers.push(localSrv);
-    activeSrvId = srvId;
-    renderServerBar();
-    renderCards();
-  } else {
-    // 切换到本地终端服务器
-    activeSrvId = localSrv.id;
-    renderServerBar();
-    renderCards();
-  }
-  await openLocalTerminal(localSrv, sessName, shellOverride, null);
-  // 保存会话到 sessionStorage
-  saveSessionsToStorage();
-}
-
-async function openLocalTerminal(srv, name, shellOverride, ownSrvId) {
-  const term = new Terminal({
-    cursorBlink: true, fontSize: 14, fontFamily: 'monospace',
-    theme: _xtermTheme(),
-  });
-  const fit = new FitAddon.FitAddon();
-  term.loadAddon(fit);
-  term.loadAddon(new WebLinksAddon.WebLinksAddon());
-
-  srv.sessions[name] = { ws: null, term, fitAddon: fit, status: 'connecting', pid: null, lastOutputAt: 0, shell: shellOverride };
-  srv.activeSession = name;
-  hideFeishuView();
-  renderSessionList();
-  restoreTerminal();
-  safeFit(srv, name);
-
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(`${proto}//${location.host}/ws/local/${encodeURIComponent(name)}`);
-  srv.sessions[name].ws = ws;
-
-  ws.onopen = () => {
-    const { rows, cols } = term;
-    ws.send(JSON.stringify({ type: 'local_connect', shell: shellOverride, rows, cols }));
-  };
-
-  ws.onmessage = evt => {
-    let msg; try { msg = JSON.parse(evt.data); } catch { return; }
-    if (msg.type === 'output') {
-      term.write(Uint8Array.from(atob(msg.data), c => c.charCodeAt(0)));
-      if (srv.sessions[name]) srv.sessions[name].lastOutputAt = Date.now();
-    } else if (msg.type === 'connected') {
-      if (srv.sessions[name]) { srv.sessions[name].status = 'alive'; srv.sessions[name].pid = msg.pid; }
-      renderSessionList(); renderCards(); updateToolbar();
-      toast(t('local_terminal') + t('toast_connected') + ` (pid=${msg.pid})`);
-    } else if (msg.type === 'exit') {
-      if (srv.sessions[name]) srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write('\r\n\x1b[33m[本地终端已关闭，2秒后关闭卡片]\x1b[0m\r\n');
-      setTimeout(() => killSessionByName(srv.id, name), 2000);
-    } else if (msg.type === 'error') {
-      if (srv.sessions[name]) srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write(`\r\n\x1b[31m[错误: ${msg.message}]\x1b[0m\r\n`);
-      setTimeout(() => killSessionByName(srv.id, name), 3000);
-    }
-  };
-
-  ws.onclose = () => {
-    // 不自动断开，让用户手动关闭
-    if (srv.sessions[name] && srv.sessions[name].status === 'alive') {
-      srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-    }
-  };
-
-  term.onData(data => {
-    if (ws.readyState === WebSocket.OPEN) {
-      const bytes = new TextEncoder().encode(data);
-      ws.send(JSON.stringify({ type: 'input', data: btoa(String.fromCharCode(...bytes)) }));
-    }
-  });
-  term.onResize(({ rows, cols }) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type:'resize', rows, cols }));
-  });
-}
-
-async function connectSSH() {
-  const host  = document.getElementById('ssh-host').value.trim();
-  const user  = document.getElementById('ssh-user').value.trim();
-  const pass  = document.getElementById('ssh-pass').value;
-  const key   = document.getElementById('ssh-key').value.trim();
-  const label = document.getElementById('ssh-label').value.trim() || `${user}@${host}`;
-  const port  = parseInt(document.getElementById('ssh-port').value) || 22;
-
-  if (!host || !user) { toast(t('toast_fill_host_user'), true); return; }
-
-  // 在关闭模态框之前获取复选框的值
-  const savePassCheckbox = document.getElementById('ssh-save-pass');
-  const savePass = savePassCheckbox ? savePassCheckbox.checked : false;
-
-  closeSrvModal();
-
-  // 查找是否已有相同 SSH 服务器
-  let sshSrv = servers.find(s => s.type === 'ssh' && s.host === host && s.port === port);
-  if (!sshSrv) {
-    // 创建新的 SSH 服务器
-    const srvId = `term${++_srvIdSeq}`;
-    const sshLabel = `🔒 ${label}`;
-    sshSrv = { id:srvId, label:sshLabel, type:'ssh', host, port,
-               status:'ok', sessions:{}, activeSession:null, terms:{} };
-    servers.push(sshSrv);
-    activeSrvId = srvId;
-    renderServerBar();
-    renderCards();
-  } else {
-    // 切换到已有服务器
-    activeSrvId = sshSrv.id;
-    renderServerBar();
-    renderCards();
-  }
-
-  const sessName = `ssh_${host}_${Date.now()%10000}`;
-  await openSshTerminal(sshSrv, sessName, { host, port, username: user,
-                                             password: pass, key_path: key, label, save_password: savePass }, sshSrv.id);
-
-  // 保存会话到 sessionStorage
-  saveSessionsToStorage();
-}
-
-async function openSshTerminal(srv, name, params, ownSrvId) {
-  const { createTerminal, FitAddon } = _getTerminalConstructors();
-  const term = createTerminal();
-  const fit  = new FitAddon.FitAddon();
-  term.loadAddon(fit);
-  term.loadAddon(new WebLinksAddon.WebLinksAddon());
-
-  srv.sessions[name] = { ws: null, term, fitAddon: fit, status: 'connecting', pid: null, lastOutputAt: 0, params };
-  srv.activeSession = name;
-  hideFeishuView();
-  renderSessionList();
-  restoreTerminal();
-  safeFit(srv, name);
-
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${proto}//${location.host}/ws/ssh/${encodeURIComponent(name)}`;
-  const ws = new WebSocket(wsUrl);
-  srv.sessions[name].ws = ws;
-
-  import('base64-js').catch(() => {});  // ignore — we use btoa directly
-
-  ws.onopen = () => {
-    const { rows, cols } = term;
-    ws.send(JSON.stringify({
-      type: 'ssh_connect',
-      host: params.host, port: params.port,
-      username: params.username, password: params.password || '',
-      key_path: params.key_path || '',
-      label: params.label || '',
-      rows, cols,
-      save_password: params.save_password || false
-    }));
-  };
-
-  ws.onmessage = evt => {
-    let msg;
-    try { msg = JSON.parse(evt.data); } catch { return; }
-    if (msg.type === 'output') {
-      term.write(Uint8Array.from(atob(msg.data), c => c.charCodeAt(0)));
-      if (srv.sessions[name]) srv.sessions[name].lastOutputAt = Date.now();
-    } else if (msg.type === 'connected') {
-      if (srv.sessions[name]) srv.sessions[name].status = 'alive';
-      renderSessionList(); renderCards(); updateToolbar();
-      toast(t('toast_connected') + ` ${params.label}`);
-    } else if (msg.type === 'waiting') {
-      // ignore
-    } else if (msg.type === 'error') {
-      if (srv.sessions[name]) srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write(`\r\n\x1b[31m[错误: ${msg.message}]\x1b[0m\r\n`);
-      setTimeout(() => killSessionByName(srv.id, name), 3000);
-    } else if (msg.type === 'exit') {
-      if (srv.sessions[name]) srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write('\r\n\x1b[33m[SSH 连接已关闭，2秒后关闭卡片]\x1b[0m\r\n');
-      setTimeout(() => killSessionByName(srv.id, name), 2000);
-    }
-  };
-
-  ws.onclose = () => {
-    // 不自动断开，让用户手动关闭
-    // 只有当服务器真正关闭连接时才更新状态
-    if (srv.sessions[name] && srv.sessions[name].status === 'alive') {
-      srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-    }
-  };
-
-  term.onData(data => {
-    if (ws.readyState === WebSocket.OPEN) {
-      const bytes = new TextEncoder().encode(data);
-      ws.send(JSON.stringify({ type: 'input', data: btoa(String.fromCharCode(...bytes)) }));
-    }
-  });
-
-  term.onResize(({ rows, cols }) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'resize', rows, cols }));
-    }
-  });
-}
+// closeSrvModal and commitServer moved to connections.js
 
 // Helper to get terminal constructors (xterm.js loaded via CDN)
 function _getTerminalConstructors() {
   return {
     createTerminal: () => new Terminal({
       cursorBlink: true, fontSize: 14, fontFamily: 'monospace',
-      theme: { background:'#0d1117', foreground:'#e6edf3', cursor:'#58a6ff' }
+      theme: _xtermTheme()
     }),
     FitAddon: window.FitAddon,
     WebLinksAddon: window.WebLinksAddon,
@@ -654,43 +145,7 @@ async function refreshSessions() {
   }
 }
 
-async function createSession() {
-  const srv = activeSrv();
-  if (!srv) { toast(t('toast_select_server'), true); return; }
-  const btn = document.getElementById('btn-create');
-  btn.disabled = true;
-  const name    = document.getElementById('s-name').value.trim() || null;
-  const workdir = document.getElementById('s-dir').value.trim()  || '.';
-  const argsRaw = document.getElementById('s-args').value.trim();
-  const args    = argsRaw ? argsRaw.split(/\s+/) : [];
-  try {
-    const r = await fetch(`${srvBase(srv)}/api/sessions`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ name, workdir, args })
-    });
-    const d = await r.json();
-    if (d.error) { toast('创建失败: ' + d.error, true); return; }
-    document.getElementById('s-name').value = '';
-    if (d.dir_created) toast(`已自动创建目录: ${d.workdir}`);
-    connectSession(srv, d.name);
-  } catch (e) {
-    toast('创建失败: ' + e.message, true);
-  } finally {
-    btn.disabled = false;
-  }
-}
 
-async function killActive() {
-  const srv = activeSrv();
-  if (!srv || !srv.activeSession) return;
-  const name = srv.activeSession;
-  if (!confirm(`终止会话 "${name}"？`)) return;
-  try {
-    await fetch(`${srvBase(srv)}/api/sessions/${encodeURIComponent(name)}?force=true`, { method: 'DELETE' });
-  } catch (_) {}
-  const s = srv.sessions[name];
-  if (s) { s.status = 'dead'; renderSessionList(); updateToolbar(); }
-}
 
 // ── Activity dot helpers ─────────────────────────────────
 const BUSY_TTL = 1800;  // ms of no output → considered idle
@@ -705,17 +160,6 @@ function sessDotClass(s) {
 
 function sessStatusText(s) {
   if (s.status === 'connecting') return t('connecting');
-  if (s.status === 'dead')       return t('status_stopped');
-  const busy = s.lastOutputAt && (Date.now() - s.lastOutputAt < BUSY_TTL);
-  return busy ? t('running') : t('stopped');
-}
-
-// Update just the dot element in-place (avoids full list re-render)
-function updateDot(srv, name) {
-  const s = srv.sessions[name];
-  if (!s) return;
-  const dotId = `dot-${srv.id}-${CSS.escape(name)}`;
-  const el = document.getElementById(dotId);
   if (el) {
     el.className = `s-dot ${sessDotClass(s)}`;
   }
@@ -766,7 +210,7 @@ function renderSessionList() {
       `<span class="s-name" title="双击重命名">${name}</span>` +
       `<span class="s-actions">` +
         `<span class="s-btn" title="重命名" data-act="rename">✎</span>` +
-        `<span class="s-btn danger" title="终止" data-act="kill">✕</span>` +
+        `<span class="s-btn danger" title="${t('kill')}" data-act="kill">✕</span>` +
       `</span>`;
     // click → switch
     item.addEventListener('click', e => {
@@ -880,69 +324,6 @@ function createTerminal() {
   return { term, fit };
 }
 
-function connectSession(srv, name) {
-  // Mark active
-  srv.activeSession = name;
-  renderSessionList();
-  renderCards();
-  updateToolbar();
-
-  // If already connected & alive, just restore
-  if (srv.sessions[name] && srv.sessions[name].ws &&
-      srv.sessions[name].ws.readyState <= WebSocket.OPEN) {
-    restoreTerminal();
-    safeFit(srv, name);
-    // 刷新卡片状态
-    setTimeout(() => { renderCards(); }, 100);
-    return;
-  }
-
-  // Create new terminal + WS
-  const { term, fit } = createTerminal();
-  const ws = new WebSocket(wsUrl(srv, name));
-  srv.sessions[name] = { ws, term, fitAddon: fit, status: 'connecting', pid: null, lastOutputAt: 0 };
-  renderSessionList();
-  renderCards();
-  updateToolbar();
-  restoreTerminal();
-
-  ws.onopen = () => setTimeout(() => safeFit(srv, name), 60);
-  ws.onmessage = ev => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === 'output') {
-      term.write(Uint8Array.from(atob(msg.data), c => c.charCodeAt(0)));
-      // Mark session as busy (working)
-      if (srv.sessions[name]) {
-        srv.sessions[name].lastOutputAt = Date.now();
-        updateDot(srv, name);
-      }
-    } else if (msg.type === 'connected') {
-      srv.sessions[name].status = 'alive';
-      srv.sessions[name].pid = msg.pid;
-      renderSessionList(); updateToolbar();
-      toast(`已连接 "${name}" (pid=${msg.pid})`);
-    } else if (msg.type === 'exit') {
-      srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write('\r\n\x1b[33m[会话已退出]\x1b[0m\r\n');
-    } else if (msg.type === 'error') {
-      srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write(`\r\n\x1b[31m[错误: ${msg.message}]\x1b[0m\r\n`);
-    }
-  };
-  ws.onclose = () => {
-    if (srv.sessions[name] && srv.sessions[name].status !== 'dead') {
-      srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-    }
-  };
-  term.onData(data => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type:'input', data: btoa(String.fromCharCode(...new TextEncoder().encode(data))) }));
-    }
-  });
-}
 
 // Detach all terminals from DOM, attach active one
 function restoreTerminal() {
@@ -1198,6 +579,7 @@ function _appendFeishuEvents(events) {
 
 let _cards = [];
 let _expandedCardId = null;
+let _expandedSessionCard = null;  // 格式：srvId:sessionName
 let _ncType = 'claude';
 let _cardPollTimer = null;
 // _fpEvIdx removed; replaced by _fpEvIdxMap (per-card event index)
@@ -1246,7 +628,7 @@ function renderCards() {
     // SSH 终端服务器 - 显示会话列表
     if (hdrTitle) hdrTitle.textContent = t('ssh_terminal');
     if (addBtn) {
-      addBtn.onclick = openSshConnect;
+      addBtn.onclick = () => addSshSessionToCurrentServer();
       addBtn.title = t('new_ssh_terminal');
     }
     // 显示当前服务器的会话列表
@@ -1279,30 +661,45 @@ function renderCards() {
 function buildSessionCardEl(srv, name, sess) {
   const div = document.createElement('div');
   const isActive = name === srv.activeSession;
-  div.className = 'card' + (isActive ? ' card-active' : '');
+  // 使用展开状态跟踪
+  const isExp = _expandedSessionCard === `${srv.id}:${name}`;
+  div.className = 'card' + (isActive ? ' card-active' : '') + (isExp ? ' expanded' : '');
   div.dataset.sessionName = name;
 
   const status = sess.status || 'unknown';
   const dotColor = status === 'alive' ? 'var(--green)' :
                    status === 'connecting' || status === 'reconnecting' ? 'var(--yellow)' :
                    status === 'dead' ? 'var(--red)' : 'var(--muted)';
-  const pidText = sess.pid ? `PID: ${sess.pid}` : '';
   const icon = srv.type === 'ssh' ? '🔒' : '🖥';
+  const statusLabel = status === 'alive' ? t('status_running') :
+                      status === 'connecting' || status === 'reconnecting' ? t('status_connecting') :
+                      status === 'dead' ? t('status_stopped') : t('unknown');
+  // 根据状态显示不同信息
+  let metaText;
+  if (sess.pid) {
+    metaText = `PID: ${sess.pid}`;
+  } else if (status === 'reconnecting') {
+    metaText = t('status_connecting') + '...';
+  } else if (status === 'connecting') {
+    metaText = t('status_connecting') + '...';
+  } else if (status === 'alive') {
+    metaText = t('status_running');
+  } else {
+    metaText = t('not_connected');
+  }
 
   div.innerHTML = `
-    <div class="card-hdr" onclick="connectSessionByName('${srv.id}', '${escHtmlAttr(name)}')">
+    <div class="card-hdr" onclick="toggleSessionCard('${srv.id}', '${escHtmlAttr(name)}')" title="点击展开/折叠，双击重命名">
       <span class="card-icon">${icon}</span>
       <span class="card-name" title="${esc(t('double_click_rename'))}">${esc(name)}</span>
       <span class="card-rename-btn" onclick="event.stopPropagation();startRenameSessionCardBtn(this, '${srv.id}', '${escHtmlAttr(name)}')" title="${esc(t('rename'))}">✏</span>
-      <span class="card-del-btn" onclick="event.stopPropagation();killSessionByName('${srv.id}', '${escHtmlAttr(name)}');return false;" title="${esc(t('delete'))}">✕</span>
-      <span class="card-dot" style="background:${dotColor}" title="${status}"></span>
-      <span class="card-chevron" onclick="event.stopPropagation();" title="${esc(t('more'))}">▲</span>
+      <span class="card-dot" style="background:${dotColor}" title="${statusLabel}"></span>
+      <span class="card-chevron" onclick="event.stopPropagation();toggleSessionCard('${srv.id}', '${escHtmlAttr(name)}')" title="${esc(t('expand'))}">▲</span>
     </div>
     <div class="card-body">
-      <div class="card-meta">${pidText || esc(t('not_connected'))}</div>
-      <div class="card-actions" style="align-items:center">
-        <button class="cbtn ok" onclick="connectSessionByName('${srv.id}', '${escHtmlAttr(name)}')">${esc(t('connect'))}</button>
-        <button class="cbtn del" onclick="killSessionByName('${srv.id}', '${escHtmlAttr(name)}')">${esc(t('close'))}</button>
+      <div class="card-meta" style="display:flex;align-items:center;justify-content:space-between">
+        <span>${metaText}</span>
+        <button class="cbtn del" onclick="killSessionByName('${srv.id}', '${escHtmlAttr(name)}')" title="${esc(t('close'))}">${esc(t('close'))}</button>
       </div>
     </div>
   `;
@@ -1832,6 +1229,52 @@ function toggleCard(id) {
   renderCards();
 }
 
+async function toggleSessionCard(srvId, name) {
+  const cardKey = `${srvId}:${name}`;
+  const srv = srvById(srvId);
+  if (!srv) return;
+
+  // 如果卡片已展开，则折叠
+  if (_expandedSessionCard === cardKey) {
+    _expandedSessionCard = null;
+    renderCards();
+    return;
+  }
+
+  // 展开卡片并连接会话
+  _expandedSessionCard = cardKey;
+
+  // 检查会话是否需要连接
+  const sess = srv.sessions[name];
+  if (sess && (!sess.ws || sess.ws.readyState !== WebSocket.OPEN)) {
+    // 需要连接 - 先隐藏飞书视图，显示终端区域
+    hideFeishuView();
+    // 确保终端区域显示
+    document.getElementById('feishu-view').style.display = 'none';
+    document.getElementById('term-wrap').style.display = '';
+    // 创建终端连接
+    if (srv.type === 'ssh') {
+      await openSshTerminal(srv, name, sess.params || {}, srv.id);
+    } else if (srv.type === 'local') {
+      await openLocalTerminal(srv, name, sess.shell || '', srv.id);
+    }
+  } else if (sess && sess.ws && sess.ws.readyState === WebSocket.OPEN) {
+    // 已连接，直接显示终端
+    hideFeishuView();
+    document.getElementById('feishu-view').style.display = 'none';
+    document.getElementById('term-wrap').style.display = '';
+  }
+
+  // 切换到该会话
+  srv.activeSession = name;
+  activeSrvId = srv.id;
+
+  renderCards();
+  renderSessionList();
+  restoreTerminal();
+  updateToolbar();
+}
+
 async function cardStart(id) {
   try {
     const r = await fetch(`/api/cards/${id}/start`, {method:'POST'});
@@ -1997,7 +1440,7 @@ function hideFeishuView() {
   document.getElementById('term-wrap').style.display   = '';
   // Restore kill button behavior
   const killBtn = document.getElementById('t-kill');
-  killBtn.textContent = '终止';
+  killBtn.textContent = t('kill');
   killBtn.onclick = killActive;
 }
 
@@ -2605,14 +2048,14 @@ function _renderStats(d) {
   const cost     = d.cost_usd || 0;
 
   const cells = [
-    { label:'运行时长', val: durStr, sub: d.alive ? '●运行中' : '■已停止', cls: d.alive?'green':'' },
-    { label:'对话轮数', val: (turns.user||0)+(turns.assistant||0), sub:`用户 ${turns.user||0} / AI ${turns.assistant||0}`, cls:'blue' },
-    { label:'输入 Token', val: fmtNum(totalIn), sub:`直接 ${fmtNum(tk.input||0)}  缓存读 ${fmtNum(tk.cache_read||0)}`, cls:'' },
-    { label:'输出 Token', val: fmtNum(totalOut), sub:`缓存写 ${fmtNum(tk.cache_creation||0)}`, cls:'' },
-    { label:'工具调用', val: d.tool_uses||0, sub:'Tool use 次数', cls:'' },
-    { label:'费用估算', val: cost > 0 ? `$${cost.toFixed(4)}` : '—', sub:'USD', cls: cost>0?'yellow':'' },
-    { label:'PID', val: d.pid||'—', sub: `缓冲区 ${((d.buffer_bytes||0)/1024).toFixed(1)}KB`, cls:'', wide:false },
-    { label:'工作目录', val: '', sub: d.workdir||'—', cls:'', wide:true },
+    { label: t('stats_runtime'), val: durStr, sub: d.alive ? t('stats_running') : t('stats_stopped'), cls: d.alive?'green':'' },
+    { label: t('stats_turns'), val: (turns.user||0)+(turns.assistant||0), sub: t('stats_turns_sub', {user: turns.user||0, ai: turns.assistant||0}), cls:'blue' },
+    { label: t('stats_input_tokens'), val: fmtNum(totalIn), sub: t('stats_input_sub', {direct: fmtNum(tk.input||0), cache_read: fmtNum(tk.cache_read||0)}), cls:'' },
+    { label: t('stats_output_tokens'), val: fmtNum(totalOut), sub: t('stats_output_sub', {cache_write: fmtNum(tk.cache_creation||0)}), cls:'' },
+    { label: t('stats_tool_calls'), val: d.tool_uses||0, sub: t('stats_tool_calls_sub'), cls:'' },
+    { label: t('stats_cost'), val: cost > 0 ? `$${cost.toFixed(4)}` : '—', sub:'USD', cls: cost>0?'yellow':'' },
+    { label: t('stats_pid'), val: d.pid||'—', sub: t('stats_buffer', {kb: ((d.buffer_bytes||0)/1024).toFixed(1)}), cls:'', wide:false },
+    { label: t('stats_workdir'), val: '', sub: d.workdir||'—', cls:'', wide:true },
   ];
 
   return `<div class="stats-grid">${cells.map(c =>
@@ -2644,6 +2087,8 @@ const _i18n = {
     new_card:          '新建',
     no_cards:          '暂无卡片<br>点击 ＋ 新建',
     session_list:      '会话列表',
+    add_server_conn:   '添加服务器连接',
+    sidebar_resize:    '',
 
     // Card states
     running:           '运行中',
@@ -2674,6 +2119,30 @@ const _i18n = {
     clear_log:         '清空日志',
     log_cleared:       '日志已清空',
     stats:             '📊 统计',
+
+    // Server settings
+    server_settings_title: '⚙ 服务器设置',
+    cfg_tab_basic:     '⚙ 基本设置',
+    cfg_tab_files:     '📁 配置文件参考',
+    label_listen_ip:   '监听 IP',
+    label_port:        '端口',
+    cfg_hint:          '监听地址和端口由启动参数决定，如需修改请重启服务时指定 --host 和 --port 参数。',
+    cfg_close_btn:     '关闭',
+    cfg_env_section:   '环境变量',
+    cfg_args_section:  '启动参数',
+    cfg_files_section: '运行时配置文件',
+    cfg_cards_section: 'cards.json — Card 字段说明',
+    cfg_paths_section: '其他运行时路径',
+    cfg_hint_default:  '（默认',
+    cfg_table_var:     '变量',
+    cfg_table_default: '默认值',
+    cfg_table_desc:    '说明',
+    cfg_table_param:   '参数',
+    cfg_table_file:    '文件',
+    cfg_table_usage:   '用途',
+    cfg_table_fields:  '关键字段',
+    cfg_table_field:   '字段',
+    cfg_table_type:    '适用类型',
 
     // Toast messages
     toast_saved:       '配置已保存',
@@ -2776,6 +2245,24 @@ const _i18n = {
     clear_screen:      '清屏',
     kill:              '终止',
     scheduled_tasks:   '定时任务',
+
+    // Stats modal
+    stats_runtime:     '运行时长',
+    stats_running:     '●运行中',
+    stats_stopped:     '■已停止',
+    stats_turns:       '对话轮数',
+    stats_turns_sub:   '用户 {user} / AI {ai}',
+    stats_input_tokens:'输入 Token',
+    stats_input_sub:   '直接 {direct}  缓存读 {cache_read}',
+    stats_output_tokens:'输出 Token',
+    stats_output_sub:  '缓存写 {cache_write}',
+    stats_tool_calls:  '工具调用',
+    stats_tool_calls_sub:'Tool use 次数',
+    stats_cost:        '费用估算',
+    stats_pid:         'PID',
+    stats_buffer:      '缓冲区 {kb}KB',
+    stats_workdir:     '工作目录',
+
     skills_panel:      'Skills 面板',
     prompt_templates_panel: 'Prompt 模板',
     feishu_msg_hint:   '飞书消息将在此显示',
@@ -2910,6 +2397,10 @@ const _i18n = {
     im_ww_secret_ph:   '••••••••••',
     im_ww_token_ph:    '随机字符串',
     im_ww_aeskey_ph:   '43 位随机字符串',
+    im_ww_corpid_lbl:  'Corp ID（企业 ID）',
+    im_ww_agentid_lbl: 'Agent ID（应用 ID）',
+    im_ww_token_lbl:   'Token（消息校验 Token）',
+    im_ww_aeskey_lbl:  'EncodingAESKey（43 位）',
     im_ww_delay_lbl:   '回复延迟 (秒)',
     im_ww_hint:        'Webhook 回调地址将在创建后显示。需在企业微信管理后台 → 应用 → 接收消息 中填写该地址。',
     im_create_auto:    '创建后立即启动',
@@ -2918,7 +2409,7 @@ const _i18n = {
 
     // Server/connection modal
     srv_modal_title:   '添加连接',
-    srv_ct_http:       '🌐 DruidClaw',
+    srv_ct_http:       '🌐 Claude Code',
     srv_ct_local:      '🖥 本地终端',
     srv_ct_ssh:        '🔒 SSH 终端',
     srv_local_shell_lbl: 'Shell（可选，默认 $SHELL）',
@@ -2927,7 +2418,7 @@ const _i18n = {
     srv_my_server:     '我的服务器',
     srv_ip_lbl:        'IP 地址',
     srv_port_lbl:      '端口',
-    srv_hint:          '填写远程 DruidClaw 服务器的地址和端口。',
+    srv_hint:          '填写远程 Claude Code 服务器的地址和端口。',
     srv_hist_lbl:      '历史连接',
     srv_new_div:       '新建',
     srv_ssh_label_ph:  '生产服务器',
@@ -2961,6 +2452,8 @@ const _i18n = {
     cfg_druidclaw_run_dir: '运行时数据目录（所有 JSON 配置文件所在位置）',
     cfg_druidclaw_web_host: '绑定地址（启动时写入，优先于 config.json）',
     cfg_druidclaw_web_port: '监听端口（启动时写入，优先于 config.json）',
+    cfg_read_config:   '读 config.json',
+    cfg_read_env:      '读 DRUIDCLAW_TOKEN',
     cfg_startup_args:  '启动参数',
     cfg_col_param:     '参数',
     cfg_host_desc:     '绑定地址，覆盖已保存配置',
@@ -2982,6 +2475,8 @@ const _i18n = {
     cfg_card_fields:   'cards.json — Card 字段说明',
     cfg_col_field:     '字段',
     cfg_col_app_type:  '适用类型',
+    cfg_all_types:     '全部',
+    cfg_im_types:      'IM 类',
     cfg_field_id:      '自动生成的 8 位 hex ID',
     cfg_field_type:    '<code>claude</code> / <code>feishu</code> / <code>telegram</code> / <code>dingtalk</code> / <code>qq</code> / <code>wework</code>',
     cfg_field_name:    '显示名称',
@@ -3064,6 +2559,7 @@ const _i18n = {
     mcp_market_btn:    'MCP 市场',
     prompt_btn:        'Prompt 模板',
     prompt_mgmt:       '模板管理',
+    toggle_sidebar:    '折叠侧栏',
   },
   en: {
     // Header toolbar
@@ -3083,6 +2579,8 @@ const _i18n = {
     new_card:          'New',
     no_cards:          'No cards<br>Click ＋ to create',
     session_list:      'Sessions',
+    add_server_conn:   'Add Server Connection',
+    sidebar_resize:    '',
 
     // Card states
     running:           'Running',
@@ -3215,6 +2713,24 @@ const _i18n = {
     clear_screen:      'Clear',
     kill:              'Kill',
     scheduled_tasks:   'Scheduled Tasks',
+
+    // Stats modal
+    stats_runtime:     'Runtime',
+    stats_running:     '●Running',
+    stats_stopped:     '■Stopped',
+    stats_turns:       'Turns',
+    stats_turns_sub:   'User {user} / AI {ai}',
+    stats_input_tokens:'Input Tokens',
+    stats_input_sub:   'Direct {direct}  Cache read {cache_read}',
+    stats_output_tokens:'Output Tokens',
+    stats_output_sub:  'Cache write {cache_write}',
+    stats_tool_calls:  'Tool Calls',
+    stats_tool_calls_sub:'Tool use count',
+    stats_cost:        'Cost',
+    stats_pid:         'PID',
+    stats_buffer:      'Buffer {kb}KB',
+    stats_workdir:     'Working Dir',
+
     skills_panel:      'Skills Panel',
     prompt_templates_panel: 'Prompt Templates',
     feishu_msg_hint:   'Feishu messages will appear here',
@@ -3352,6 +2868,10 @@ const _i18n = {
     im_ww_secret_ph:   '••••••••••',
     im_ww_token_ph:    'Random string',
     im_ww_aeskey_ph:   '43-character random string',
+    im_ww_corpid_lbl:  'Corp ID',
+    im_ww_agentid_lbl: 'Agent ID',
+    im_ww_token_lbl:   'Token',
+    im_ww_aeskey_lbl:  'Encoding AES Key',
     im_ww_delay_lbl:   'Reply Delay (s)',
     im_ww_hint:        'Webhook callback URL will be shown after creation. Need to configure it in WeCom Admin Panel → App → Receive Messages.',
     im_create_auto:    'Auto-start after creation',
@@ -3360,7 +2880,7 @@ const _i18n = {
 
     // Server/connection modal
     srv_modal_title:   'Add Connection',
-    srv_ct_http:       '🌐 DruidClaw',
+    srv_ct_http:       '🤖 Claude Code',
     srv_ct_local:      '🖥 Local Shell',
     srv_ct_ssh:        '🔒 SSH Terminal',
     srv_local_shell_lbl: 'Shell (optional, default $SHELL)',
@@ -3403,6 +2923,8 @@ const _i18n = {
     cfg_druidclaw_run_dir: 'Runtime data directory (where JSON config files are stored)',
     cfg_druidclaw_web_host: 'Bind address (written at startup, takes precedence over config.json)',
     cfg_druidclaw_web_port: 'Listen port (written at startup, takes precedence over config.json)',
+    cfg_read_config:   'Read config.json',
+    cfg_read_env:      'Read DRUIDCLAW_TOKEN',
     cfg_startup_args:  'Startup Arguments',
     cfg_col_param:     'Parameter',
     cfg_host_desc:     'Bind address, overrides saved config',
@@ -3424,6 +2946,8 @@ const _i18n = {
     cfg_card_fields:   'cards.json — Card Fields',
     cfg_col_field:     'Field',
     cfg_col_app_type:  'App Type',
+    cfg_all_types:     'All',
+    cfg_im_types:      'IM Bots',
     cfg_field_id:      'Auto-generated 8-char hex ID',
     cfg_field_type:    '<code>claude</code> / <code>feishu</code> / <code>telegram</code> / <code>dingtalk</code> / <code>qq</code> / <code>wework</code>',
     cfg_field_name:    'Display name',
@@ -3506,12 +3030,19 @@ const _i18n = {
     mcp_market_btn:    'MCP Market',
     prompt_btn:        'Prompt Templates',
     prompt_mgmt:       'Management',
+    toggle_sidebar:    'Toggle Sidebar',
   }
 };
 let _lang = localStorage.getItem('cc_lang') || 'zh';
 
-function t(key) {
-  return (_i18n[_lang] && _i18n[_lang][key]) || (_i18n.zh[key]) || key;
+function t(key, params) {
+  let val = (_i18n[_lang] && _i18n[_lang][key]) || (_i18n.zh[key]) || key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      val = val.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
+    }
+  }
+  return val;
 }
 
 function applyLang() {
