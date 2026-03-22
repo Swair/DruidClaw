@@ -1,5 +1,7 @@
 # DruidClaw
 
+![DruidClaw Logo](druidclaw/web/static/logo.png)
+
 DruidClaw 是一个基于 Claude Code 的多功能会话管理和 IM 机器人集成平台。
 
 ## 功能特性
@@ -48,6 +50,8 @@ npx @anthropic-ai/claude-code
 ### 访问 Web 界面
 
 打开浏览器访问 `http://localhost:19123`
+
+![Web Demo](web_demo.png)
 
 ## 目录结构
 
