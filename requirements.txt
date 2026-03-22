@@ -1,0 +1,10 @@
+# DruidClaw - Python dependencies
+fastapi>=0.135.0
+uvicorn>=0.38.0
+python-multipart>=0.0.20
+paramiko>=4.0.0
+httpx>=0.28.0
+pydantic>=2.12.0
+python-dotenv>=1.0.0
+bcrypt>=4.0.0
+websockets>=15.0
