@@ -21,11 +21,11 @@ from datetime import datetime
 from pathlib import Path
 
 from druidclaw.core.session import ClaudeSession
-from druidclaw.imbot.feishu import FeishuBot
-from druidclaw.imbot.telegram import TelegramBot
-from druidclaw.imbot.dingtalk import DingtalkBot
-from druidclaw.imbot.qq import QQBot
-from druidclaw.imbot.wework import WeWorkBot
+from druidclaw.core.imbot.feishu import FeishuBot
+from druidclaw.core.imbot.telegram import TelegramBot
+from druidclaw.core.imbot.dingtalk import DingtalkBot
+from druidclaw.core.imbot.qq import QQBot
+from druidclaw.core.imbot.wework import WeWorkBot
 
 from druidclaw.web.state import (
     RUN_DIR,
@@ -202,11 +202,13 @@ def _claude_state(data: bytes) -> str:
     """
     text = _ANSI_CLEAN_RE.sub('', data.decode('utf-8', errors='replace'))
     text = text.replace('\r', '').replace(' ', '')
+    state = 'unknown'
     if _WORKING_RE.search(text):
-        return 'working'
-    if _IDLE_RE.search(text):
-        return 'idle'
-    return 'unknown'
+        state = 'working'
+    elif _IDLE_RE.search(text):
+        state = 'idle'
+    logger.info(f"_claude_state: raw={text[:80]!r} state={state}")
+    return state
 
 
 # ── Session registry helpers (imported from routes/sessions at runtime) ──
@@ -477,16 +479,19 @@ class _ReplyCollector:
             self._buf.extend(data)
 
             state = _claude_state(data)
+            logger.info(f"_ReplyCollector: state={state} buf_size={len(self._buf)}")
             if state == 'working':
                 # Claude still busy — cancel any pending flush so we don't
                 # send a partial response mid-execution
                 if self._timer:
                     self._timer.cancel()
                     self._timer = None
+                    logger.info("_ReplyCollector: Claude working, cancelled timer")
             elif state == 'idle':
                 # Claude just finished — short confirmation delay then flush
                 if self._timer:
                     self._timer.cancel()
+                logger.info("_ReplyCollector: Claude idle, scheduling flush")
                 self._timer = threading.Timer(self.CONFIRM_DELAY, self._flush)
                 self._timer.daemon = True
                 self._timer.start()
@@ -494,6 +499,7 @@ class _ReplyCollector:
                 # No state marker — fall back to silence timer
                 if self._timer:
                     self._timer.cancel()
+                logger.info(f"_ReplyCollector: unknown state, scheduling flush in {self._delay}s")
                 self._timer = threading.Timer(self._delay, self._flush)
                 self._timer.daemon = True
                 self._timer.start()
@@ -512,13 +518,16 @@ class _ReplyCollector:
         self._session.remove_output_callback(self._on_output)
         try:
             if not buf:
+                logger.debug("_ReplyCollector._flush: empty buffer, skipping")
                 return
 
             raw = buf.decode("utf-8", errors="replace")
             text = _clean_output(raw, skip_echo=self._input_text)
             if not text:
+                logger.debug("_ReplyCollector._flush: no text after cleaning, skipping")
                 return
 
+            logger.info(f"_ReplyCollector._flush: sending reply to {self._chat_id[:20]} text={text[:100]}...")
             elapsed = time.time() - self._start_time
             if elapsed >= 60:
                 elapsed_str = f"{int(elapsed // 60)}m {int(elapsed % 60)}s"
@@ -532,6 +541,7 @@ class _ReplyCollector:
 
             all_ok = True
             for chunk in chunks:
+                logger.debug(f"_ReplyCollector: sending chunk to {self._chat_id[:20]}: {chunk[:50]}...")
                 if not self._bot.send_message(self._chat_id, chunk):
                     logger.warning(f"Failed to send reply chunk to {self._chat_id}")
                     all_ok = False
@@ -843,10 +853,12 @@ def _on_feishu_event(bot: FeishuBot, event: dict):
     """
     header = event.get("header", {})
     if header.get("event_type") != "im.message.receive_v1":
+        logger.debug(f"Feishu event ignored: {header.get('event_type')}")
         return
 
     pool: Optional[_UserSessionPool] = getattr(bot, '_user_pool', None)
     if not pool:
+        logger.warning("Feishu event dropped: no user pool")
         return
 
     delay = float(getattr(bot, '_reply_delay', _bridge_cfg.get("reply_delay", 2.0)))
@@ -857,6 +869,7 @@ def _on_feishu_event(bot: FeishuBot, event: dict):
     sender  = evt_body.get("sender", {})
     user_key = sender.get("sender_id", {}).get("open_id", "") or chat_id
     if not user_key:
+        logger.warning("Feishu event dropped: no user_key")
         return
 
     msg_type = msg.get("message_type", "")
@@ -892,11 +905,14 @@ def _on_feishu_event(bot: FeishuBot, event: dict):
             bot.send_message(chat_id, f"⚠️ 暂不支持「{msg_type}」类型消息，请发送文字或图片。")
         return
 
+    logger.info(f"Feishu event: user={user_key[:20]} text={text[:50]}...")
     if _handle_im_cmd(bot, text, chat_id, pool._session_name(user_key),
                       pool=pool, user_key=user_key):
+        logger.info("Feishu event handled as command")
         return
 
     pool.enqueue(user_key, text, chat_id, bot, delay)
+    logger.info(f"Feishu event enqueued: user={user_key[:20]} chat={chat_id[:20]}")
 
 
 def _on_telegram_event(bot: TelegramBot, update: dict):

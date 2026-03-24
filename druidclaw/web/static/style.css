@@ -303,6 +303,24 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 #term-wrap {
   flex: 1; padding: 4px 6px 0; overflow: hidden; min-height: 0;
 }
+#term-wrap .xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+#term-wrap .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+#term-wrap .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+#term-wrap .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+#term-wrap .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
 .term-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   height: 100%; gap: 14px; color: var(--muted);
@@ -732,12 +750,23 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   width: 190px; flex-shrink: 0;
   background: var(--bg2); border-left: 1px solid var(--border);
   display: flex; flex-direction: column; overflow: hidden;
-  transition: width .2s;
+  position: relative;
 }
 .skills-sidebar.collapsed { width: 0; border-left: none; }
+/* Right sidebar resize handle */
+.sidebar-resize-handle {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 5px; cursor: col-resize; background: transparent;
+  z-index: 100; transition: background .15s;
+  pointer-events: auto;
+}
+.sidebar-resize-handle:hover, .sidebar-resize-handle.resizing {
+  background: var(--blue);
+}
 .skills-hdr {
   display: flex; align-items: center; gap: 6px;
-  padding: 8px 10px 6px; flex-shrink: 0; min-height: 0;
+  padding: 8px 10px 6px 10px; flex-shrink: 0; min-height: 0;
+  position: relative; z-index: 1;
 }
 .skills-hdr-title {
   font-size: 10px; font-weight: 700; color: var(--muted);
@@ -872,10 +901,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 #prompt-dd-form input:focus, #prompt-dd-form textarea:focus { border-color: var(--blue); }
 #prompt-dd-form div button { width: auto; }
 
-/* ── Right sidebar tabs ─────────────────────────────────── */
+/* Sk tabs */
 .sk-tabs {
   display: flex; flex-shrink: 0;
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
 .sk-tab {
   flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 600;

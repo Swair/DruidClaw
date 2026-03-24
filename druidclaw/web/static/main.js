@@ -4,7 +4,7 @@
 //  (global state defined in connections.js)
 // ============================================================
 
-// base URL for REST calls to a server
+// 获取服务器的基础 URL（用于 REST 请求）
 function srvBase(srv) {
   const isSelf = (srv.host === location.hostname ||
                   (srv.host === 'localhost' && location.hostname === 'localhost') ||
@@ -13,6 +13,7 @@ function srvBase(srv) {
   return `http://${srv.host}:${srv.port}`;
 }
 
+// 构建 WebSocket 连接 URL
 function wsUrl(srv, name) {
   const proto = srv.host.startsWith('https') ? 'wss:' : 'ws:';
   return `${proto}//${srv.host}:${srv.port}/ws/${encodeURIComponent(name)}`;
@@ -47,7 +48,7 @@ function openAddServer() {
 // ── Add-server modal ─────────────────────────────────────
 // closeSrvModal and commitServer moved to connections.js
 
-// Helper to get terminal constructors (xterm.js loaded via CDN)
+// 获取 xterm.js 终端构造函数（通过 CDN 加载）
 function _getTerminalConstructors() {
   return {
     createTerminal: () => new Terminal({
@@ -71,6 +72,7 @@ function cfgTab(name) {
   const closeEl = document.getElementById('cfg-files-close');
   if (closeEl) closeEl.style.display = name === 'files' ? 'flex' : 'none';
 }
+// 打开服务器配置模态框
 async function openSrvSettings() {
   cfgTab('basic');
   try {
@@ -82,10 +84,12 @@ async function openSrvSettings() {
   document.getElementById('cfg-modal').classList.add('show');
   setTimeout(() => document.getElementById('c-host').focus(), 50);
 }
+// 关闭配置模态框
 function closeCfgModal(ev) {
   if (ev && ev.target !== document.getElementById('cfg-modal')) return;
   document.getElementById('cfg-modal').classList.remove('show');
 }
+// 仅保存配置（不重启）
 async function saveConfigOnly() {
   const host = document.getElementById('c-host').value.trim();
   const port = parseInt(document.getElementById('c-port').value);
@@ -98,6 +102,7 @@ async function saveConfigOnly() {
   closeCfgModal();
   toast(`配置已保存 ${host}:${port}（重启后生效）`);
 }
+// 保存配置并重启服务
 async function saveAndRestart() {
   const host = document.getElementById('c-host').value.trim();
   const port = parseInt(document.getElementById('c-port').value);
@@ -129,6 +134,7 @@ async function saveAndRestart() {
 // ============================================================
 //  Session management (per server)
 // ============================================================
+// 刷新会话列表
 async function refreshSessions() {
   const srv = activeSrv();
   if (!srv) return;
@@ -150,6 +156,7 @@ async function refreshSessions() {
 // ── Activity dot helpers ─────────────────────────────────
 const BUSY_TTL = 1800;  // ms of no output → considered idle
 
+// 获取会话状态点 class（busy/idle/error）
 function sessDotClass(s) {
   if (s.status === 'connecting') return 'dot-wait';
   if (s.status === 'dead')       return 'dot-err';
@@ -158,6 +165,7 @@ function sessDotClass(s) {
   return busy ? 'dot-busy' : 'dot-ok';
 }
 
+// 获取会话状态文本
 function sessStatusText(s) {
   if (s.status === 'connecting') return t('connecting');
   if (el) {
@@ -186,6 +194,7 @@ setInterval(() => {
 }, 300);
 
 // ── Session list render ──────────────────────────────────
+// 渲染会话列表（侧边栏）
 function renderSessionList() {
   const srv = activeSrv();
   const list = document.getElementById('session-list');
@@ -234,6 +243,7 @@ function renderSessionList() {
 }
 
 // ── Inline rename ─────────────────────────────────────────
+// 开始内联重命名会话
 function startRename(item, oldName) {
   // Replace the name span with an input
   const nameSpan = item.querySelector('.s-name');
@@ -268,6 +278,7 @@ function startRename(item, oldName) {
   input.addEventListener('click', e => e.stopPropagation());
 }
 
+// 提交重命名（调用 API）
 async function commitRename(oldName, newName) {
   const srv = activeSrv();
   if (!srv) return;
@@ -296,6 +307,7 @@ async function commitRename(oldName, newName) {
   }
 }
 
+// 终止会话
 async function killSession(ev, name) {
   ev.stopPropagation();
   const srv = activeSrv();
@@ -310,6 +322,7 @@ async function killSession(ev, name) {
 // ============================================================
 //  Terminal & WebSocket
 // ============================================================
+// 创建终端实例（xterm）
 function createTerminal() {
   const term = new Terminal({
     theme: _xtermTheme(),
@@ -325,7 +338,7 @@ function createTerminal() {
 }
 
 
-// Detach all terminals from DOM, attach active one
+// 分离所有终端，附加活动会话到 DOM
 function restoreTerminal() {
   const wrap = document.getElementById('term-wrap');
   const empty = document.getElementById('term-empty');
@@ -345,6 +358,7 @@ function restoreTerminal() {
   s.term.focus();
 }
 
+// 安全地调整终端大小（检查会话是否仍为活动）
 function safeFit(srv, name) {
   const s = srv && srv.sessions[name];
   if (!s || srv.id !== activeSrvId || name !== srv.activeSession) return;
@@ -357,6 +371,7 @@ function safeFit(srv, name) {
   } catch (_) {}
 }
 
+// 清空终端内容
 function clearTerm() {
   const srv = activeSrv();
   if (srv && srv.activeSession && srv.sessions[srv.activeSession])
@@ -364,11 +379,13 @@ function clearTerm() {
 }
 
 // ── Toolbar ──────────────────────────────────────────────
+// 隐藏工具栏项
 function hideToolbarItems() {
   ['t-name','t-pid','t-badge','t-clear','t-kill'].forEach(id => {
     document.getElementById(id).style.display = 'none';
   });
 }
+// 更新工具栏显示（会话名、PID、状态）
 function updateToolbar() {
   const srv = activeSrv();
   if (!srv || !srv.activeSession) { hideToolbarItems(); return; }
@@ -388,6 +405,7 @@ function updateToolbar() {
 }
 
 // ── Sidebar toggle ────────────────────────────────────────
+// 切换侧边栏折叠状态
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('collapsed');
   setTimeout(() => {
@@ -402,6 +420,7 @@ function toggleSidebar() {
 let _feishuPollTimer = null;
 let _feishuEventIndex = 0;
 
+// 打开飞书模态框
 function openFeishuModal() {
   document.getElementById('feishu-overlay').classList.add('show');
   feishuLoadConfig();
@@ -410,12 +429,14 @@ function openFeishuModal() {
   _startFeishuPoll();
   setTimeout(() => document.getElementById('f-appid').focus(), 50);
 }
+// 关闭飞书模态框
 function closeFeishuModal(ev) {
   if (ev && ev.target !== document.getElementById('feishu-overlay')) return;
   document.getElementById('feishu-overlay').classList.remove('show');
   _stopFeishuPoll();
 }
 
+// 加载飞书配置
 async function feishuLoadConfig() {
   try {
     const r = await fetch('/api/feishu/config');
@@ -426,6 +447,7 @@ async function feishuLoadConfig() {
   } catch (_) {}
 }
 
+// 加载飞书状态
 async function feishuLoadStatus() {
   try {
     const r = await fetch('/api/feishu/status');
@@ -434,6 +456,7 @@ async function feishuLoadStatus() {
   } catch (_) {}
 }
 
+// 应用飞书状态到 UI
 function _applyFeishuStatus(d) {
   const dot   = document.getElementById('feishu-dot');
   const label = document.getElementById('feishu-label');
@@ -469,6 +492,7 @@ function _applyFeishuStatus(d) {
   disconnectBtn.style.display = isConn ? '' : 'none';
 }
 
+// 保存配置并连接飞书 bot
 async function feishuSaveAndConnect() {
   const appId  = document.getElementById('f-appid').value.trim();
   const secret = document.getElementById('f-secret').value.trim();
@@ -496,6 +520,7 @@ async function feishuSaveAndConnect() {
   feishuLoadStatus();
 }
 
+// 断开飞书连接
 async function feishuDisconnect() {
   await fetch('/api/feishu/disconnect', { method: 'POST' });
   toast('飞书 bot 已断开');
@@ -505,6 +530,7 @@ async function feishuDisconnect() {
 // ── Bridge config ─────────────────────────────────────────
 let _bridgeSaveTimer = null;
 
+// 加载飞书桥接配置
 async function feishuLoadBridge() {
   try {
     const r = await fetch('/api/feishu/bridge');
@@ -513,6 +539,7 @@ async function feishuLoadBridge() {
   } catch (_) {}
 }
 
+// 保存飞书桥接配置（防抖）
 function bridgeSave() {
   clearTimeout(_bridgeSaveTimer);
   _bridgeSaveTimer = setTimeout(async () => {
@@ -529,13 +556,16 @@ function bridgeSave() {
 }
 
 // Poll for new events while modal is open
+// 开始飞书事件轮询
 function _startFeishuPoll() {
   _feishuEventIndex = 0;
   _feishuPollTick();
 }
+// 停止飞书事件轮询
 function _stopFeishuPoll() {
   clearTimeout(_feishuPollTimer);
 }
+// 轮询飞书事件（增量获取）
 async function _feishuPollTick() {
   try {
     const [statusR, eventsR] = await Promise.all([
@@ -555,6 +585,7 @@ async function _feishuPollTick() {
   }
 }
 
+// 追加飞书事件到日志
 function _appendFeishuEvents(events) {
   const log = document.getElementById('f-event-log');
   const empty = log.querySelector('.ev-empty');
@@ -585,6 +616,7 @@ let _cardPollTimer = null;
 // _fpEvIdx removed; replaced by _fpEvIdxMap (per-card event index)
 
 // ── Load + render ─────────────────────────────────────────
+// 从后端加载卡片列表
 async function loadCards() {
   try {
     const r = await fetch('/api/cards');
@@ -598,6 +630,7 @@ async function loadCards() {
   } catch (_) {}
 }
 
+// 渲染卡片列表（根据服务器类型显示不同内容）
 function renderCards() {
   const list = document.getElementById('cards-list');
   const hdrTitle = document.querySelector('.cards-hdr-title');
@@ -641,17 +674,20 @@ function renderCards() {
       }
     }
   } else {
-    // DruidClaw 服务器 - 显示 Claude 卡片
+    // DruidClaw 服务器 - 显示 Claude 卡片和正在运行的 IM bot 卡片
     if (hdrTitle) hdrTitle.textContent = 'Claude Sessions';
     if (addBtn) {
       addBtn.onclick = openNewCardModal;
       addBtn.title = t('new_card');
     }
     const claude = _cards.filter(c => c.type === 'claude');
-    if (!claude.length) {
+    // Also show running IM bots as they have associated Claude sessions
+    const runningImBots = _cards.filter(c => _IM_TYPES.includes(c.type) && c.status && c.status.running);
+    const allCards = [...claude, ...runningImBots];
+    if (!allCards.length) {
       list.innerHTML = `<div class="cards-empty">${t('no_claude_session')}</div>`;
     } else {
-      for (const c of claude) list.appendChild(buildCardEl(c));
+      for (const c of allCards) list.appendChild(buildCardEl(c));
     }
   }
   renderFeishuPage();
@@ -1055,6 +1091,7 @@ async function submitNewImCard() {
   } catch (e) { toast(e.message, true); }
 }
 
+// 构建 Claude/IM bot 卡片元素
 function buildCardEl(card) {
   const st     = card.status || {};
   const run    = st.running;
@@ -1199,16 +1236,22 @@ function startRenameCard(id, nameEl) {
 
 // ── Card actions ──────────────────────────────────────────
 
-// Click card header: switch terminal (Claude) or Feishu view (Feishu)
+// 点击卡片：切换终端或飞书视图
 function cardSwitch(id) {
   const card = _cards.find(c => c.id === id);
   if (!card) return;
 
-  if (card.type === 'feishu') {
-    // Show Feishu event log
-    showFeishuView(card);
-    _expandedCardId = id;
-    renderCards();
+  if (_IM_TYPES.includes(card.type)) {
+    // IM bot card - connect to its Claude session if running
+    if (card.status && card.status.running) {
+      hideFeishuView();
+      const srv = activeSrv();
+      if (srv) connectSession(srv, card.name);
+      _expandedCardId = id;
+      renderCards();
+    } else {
+      toggleCard(id);
+    }
     return;
   }
 
@@ -1224,11 +1267,13 @@ function cardSwitch(id) {
   }
 }
 
+// 切换卡片展开/折叠状态
 function toggleCard(id) {
   _expandedCardId = (_expandedCardId === id) ? null : id;
   renderCards();
 }
 
+// 切换会话卡片展开/折叠（本地/SSH 终端）
 async function toggleSessionCard(srvId, name) {
   const cardKey = `${srvId}:${name}`;
   const srv = srvById(srvId);
@@ -1275,6 +1320,7 @@ async function toggleSessionCard(srvId, name) {
   updateToolbar();
 }
 
+// 启动卡片
 async function cardStart(id) {
   try {
     const r = await fetch(`/api/cards/${id}/start`, {method:'POST'});
@@ -1298,15 +1344,19 @@ async function cardStart(id) {
   } catch (e) { toast('启动失败: '+e.message, true); }
 }
 
+// 停止卡片
 async function cardStop(id) {
   try {
     await fetch(`/api/cards/${id}/stop`, {method:'POST'});
     const card = _cards.find(c=>c.id===id);
     toast(`${card ? card.name : id} 已停止`);
+    if (_expandedCardId === id) _expandedCardId = null;
     await loadCards();
+    if (card && _IM_TYPES.includes(card.type)) renderFeishuPage();
   } catch (e) { toast('停止失败: '+e.message, true); }
 }
 
+// 连接到卡片对应的 Claude 会话
 async function cardConnect(id) {
   const card = _cards.find(c=>c.id===id);
   if (!card || card.type !== 'claude') return;
@@ -1315,6 +1365,7 @@ async function cardConnect(id) {
   connectSession(srv, card.name);
 }
 
+// 删除卡片
 async function cardDelete(id) {
   const card = _cards.find(c => c.id === id);
   const isRunning = card && card.status && card.status.running;
@@ -1328,6 +1379,7 @@ async function cardDelete(id) {
 }
 
 // ── New-card modal ────────────────────────────────────────
+// 打开新建卡片模态框
 function openNewCardModal() {
   document.getElementById('new-card-modal').classList.add('show');
   selectNcType('claude');
@@ -1341,11 +1393,13 @@ function openNewCardModal() {
   setTimeout(()=>document.getElementById('nc-name').focus(), 50);
 }
 
+// 关闭新建卡片模态框
 function closeNewCardModal(ev) {
   if (ev && ev.target !== document.getElementById('new-card-modal')) return;
   document.getElementById('new-card-modal').classList.remove('show');
 }
 
+// 选择新建卡片类型（Claude/Feishu）
 function selectNcType(type) {
   _ncType = type;
   document.getElementById('nc-t-claude').classList.toggle('sel', type==='claude');
@@ -1355,6 +1409,7 @@ function selectNcType(type) {
   document.getElementById('nc-feishu-f').style.display = type==='feishu' ? '' : 'none';
 }
 
+// 提交新建卡片表单
 async function submitNewCard() {
   const autoStart = document.getElementById('nc-autostart').checked;
   let payload;
@@ -1398,6 +1453,7 @@ let _fvCardId   = null;   // currently shown feishu card id
 let _fvPollTimer = null;
 let _fvEvIdx    = 0;
 
+// 显示飞书视图（右侧面板）
 function showFeishuView(card) {
   _fvCardId = card.id;
   document.getElementById('term-wrap').style.display   = 'none';
@@ -1432,6 +1488,7 @@ function showFeishuView(card) {
   _fvPollTick();
 }
 
+// 隐藏飞书视图，显示终端
 function hideFeishuView() {
   if (!_fvCardId) return;
   _fvCardId = null;
@@ -1444,6 +1501,7 @@ function hideFeishuView() {
   killBtn.onclick = killActive;
 }
 
+// 飞书视图事件轮询
 async function _fvPollTick() {
   if (!_fvCardId) return;
   try {
@@ -1470,6 +1528,7 @@ async function _fvPollTick() {
   _fvPollTimer = setTimeout(_fvPollTick, 2000);
 }
 
+// 追加事件到飞书视图日志
 function _fvAppendEvents(events) {
   const log = document.getElementById('fv-log');
   if (!log) return;
@@ -1498,6 +1557,7 @@ function startCardPoll() {
   clearTimeout(_cardPollTimer);
   _cardPollTick();
 }
+// 卡片状态轮询
 async function _cardPollTick() {
   await loadCards();
   // Update IM event logs for all running IM bot cards
@@ -1516,6 +1576,7 @@ async function _cardPollTick() {
   _cardPollTimer = setTimeout(_cardPollTick, 4000);
 }
 let _fpEvIdxMap = {};   // card_id → last event index
+// 更新卡片日志（飞书页面或内联日志）
 function _updateCardLog(cardId, events) {
   // Feishu page log (fblog-) takes priority; fall back to inline card log (clog-)
   const log = document.getElementById(`fblog-${cardId}`) || document.getElementById(`clog-${cardId}`);
@@ -1789,11 +1850,13 @@ function _renderInstStatus(d) {
   }
 }
 
+// 开始安装器环境检测
 async function instCheck() {
   instLog('检测环境...\n');
   await instRun('check');
 }
 
+// 执行安装器命令（流式输出）
 async function instRun(action) {
   if (_instRunning) return;
   _instRunning = true;
@@ -1858,6 +1921,7 @@ function instLog(msg, level) {
   el.scrollTop = el.scrollHeight;
 }
 
+// 保存安装器配置
 async function instSaveConfig() {
   const apiKey  = document.getElementById('inst-apikey').value.trim();
   const baseUrl = document.getElementById('inst-base-url').value.trim();
@@ -1881,13 +1945,14 @@ async function instSaveConfig() {
 }
 
 // ── Right sidebar (Skills + Prompts) ─────────────────────
-let _skillsSidebarOpen = false;
+let _skillsSidebarOpen = localStorage.getItem('right-sidebar-open') === 'true';
 let _rightTab = 'skills';
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('skills-sidebar').classList.toggle('collapsed', !_skillsSidebarOpen);
 });
 
+// 打开右侧面板（skills/prompts/history）
 function openRightPanel(tab) {
   const wasOpen = _skillsSidebarOpen;
   const sameTab = _rightTab === tab;
@@ -1897,17 +1962,23 @@ function openRightPanel(tab) {
     document.getElementById('skills-sidebar').classList.add('collapsed');
   } else {
     _skillsSidebarOpen = true;
-    document.getElementById('skills-sidebar').classList.remove('collapsed');
+    const sidebar = document.getElementById('skills-sidebar');
+    sidebar.classList.remove('collapsed');
+    // Restore default width when opening via toolbar button
+    sidebar.style.width = '190px';
     switchRightTab(tab);
   }
+  localStorage.setItem('right-sidebar-open', _skillsSidebarOpen);
   setTimeout(() => {
     const srv = activeSrv();
     if (srv && srv.activeSession) safeFit(srv, srv.activeSession);
   }, 220);
 }
 
+// 切换右侧面板折叠状态
 function toggleSkillsSidebar() { openRightPanel('skills'); }
 
+// 切换右侧标签页（skills/prompts/history）
 function switchRightTab(tab) {
   _rightTab = tab;
   ['skills', 'prompts', 'history'].forEach(t => {
@@ -1919,21 +1990,22 @@ function switchRightTab(tab) {
   if (tab === 'history') loadSessionHistory();
 }
 
+// 加载会话历史（Claude 会话的提示词记录）
 async function loadSessionHistory() {
   const el = document.getElementById('history-list');
   const srv = activeSrv();
   if (!srv || !srv.activeSession) {
-    el.innerHTML = '<div class="skills-empty">请先选择一个 Claude 会话</div>';
+    el.innerHTML = '<div class="skills-empty">' + t('history_empty_hint') + '</div>';
     return;
   }
   const name = srv.activeSession;
-  el.innerHTML = '<div class="skills-empty">加载中…</div>';
+  el.innerHTML = '<div class="skills-empty">' + t('loading') + '</div>';
   try {
     const r = await fetch(`${srvBase(srv)}/api/sessions/${encodeURIComponent(name)}/history`);
-    if (!r.ok) { el.innerHTML = '<div class="skills-empty">获取失败</div>'; return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const { prompts } = await r.json();
     if (!prompts || prompts.length === 0) {
-      el.innerHTML = '<div class="skills-empty">暂无提问记录</div>';
+      el.innerHTML = '<div class="skills-empty">' + t('history_empty') + '</div>';
       return;
     }
     el.innerHTML = '';
@@ -1952,7 +2024,8 @@ async function loadSessionHistory() {
       el.appendChild(item);
     });
   } catch (e) {
-    el.innerHTML = '<div class="skills-empty">加载出错: ' + escHtml(String(e)) + '</div>';
+    console.error('Failed to load session history:', e);
+    el.innerHTML = '<div class="skills-empty">' + t('history_empty') + '</div>';
   }
 }
 
@@ -1960,6 +2033,7 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// 加载技能列表
 async function loadSkills() {
   const list = document.getElementById('skills-list');
   if (!list) return;
@@ -1968,7 +2042,7 @@ async function loadSkills() {
     const d = await r.json();
     const skills = d.skills || [];
     if (!skills.length) {
-      list.innerHTML = '<div class="skills-empty">未找到 skill<br>~/.claude/skills/</div>';
+      list.innerHTML = '<div class="skills-empty">' + t('no_skills') + '</div>';
       return;
     }
     list.innerHTML = '';
@@ -1987,10 +2061,12 @@ async function loadSkills() {
       list.appendChild(el);
     }
   } catch (e) {
-    list.innerHTML = `<div class="skills-empty">加载失败</div>`;
+    console.error('Failed to load skills:', e);
+    list.innerHTML = `<div class="skills-empty">${t('load_failed')}</div>`;
   }
 }
 
+// 插入技能到当前 Claude 会话
 function insertSkill(name) {
   const srv = activeSrv();
   if (!srv || !srv.activeSession) { toast('请先连接一个 Claude 会话', true); return; }
@@ -2005,6 +2081,7 @@ function insertSkill(name) {
 // ── Session stats modal ───────────────────────────────────
 let _statsSessionName = null;
 
+// 打开会话统计模态框
 async function openStatsModal(sessionName) {
   _statsSessionName = sessionName;
   document.getElementById('stats-title').textContent = `📊 ${sessionName}`;
@@ -2013,15 +2090,18 @@ async function openStatsModal(sessionName) {
   await _loadStats(sessionName);
 }
 
+// 关闭统计模态框
 function closeStatsModal(ev) {
   if (ev && ev.target !== document.getElementById('stats-overlay')) return;
   document.getElementById('stats-overlay').classList.remove('show');
 }
 
+// 刷新统计
 async function refreshStats() {
   if (_statsSessionName) await _loadStats(_statsSessionName);
 }
 
+// 加载统计
 async function _loadStats(name) {
   const content = document.getElementById('stats-content');
   try {
@@ -2034,6 +2114,7 @@ async function _loadStats(name) {
   }
 }
 
+// 渲染统计 HTML
 function _renderStats(d) {
   const dur = d.duration_seconds || 0;
   const durStr = dur < 60 ? `${Math.round(dur)}s`
@@ -2075,6 +2156,7 @@ const _i18n = {
     cc_terminal:       'CC 终端',
     status:            '状态',
     server_settings:   '⚙ 服务器设置',
+    server_settings_text: '服务器设置',
     im_channel:        'IM频道',
     skills_market:     'Skills市场',
     install_btn:       'ClaudeCode 安装',
@@ -2124,6 +2206,8 @@ const _i18n = {
     server_settings_title: '⚙ 服务器设置',
     cfg_tab_basic:     '⚙ 基本设置',
     cfg_tab_files:     '📁 配置文件参考',
+    cfg_basic:         '⚙ 基本设置',
+    cfg_files:         '📁 配置文件参考',
     label_listen_ip:   '监听 IP',
     label_port:        '端口',
     cfg_hint:          '监听地址和端口由启动参数决定，如需修改请重启服务时指定 --host 和 --port 参数。',
@@ -2176,11 +2260,25 @@ const _i18n = {
     toast_confirm_terminate: '终止会话 "{name}"？',
     toast_confirm_delete_session: '确定删除这个会话吗？',
     toast_confirm_delete_card: '确定删除这个卡片吗？（正在运行的服务也会停止）',
+
+    // Right sidebar
+    skills:              'Skills',
+    prompts:             'Prompt 模板',
+    history_tab:         '提问历史',
+    loading:             '加载中…',
+    no_skills:           '未找到 skill<br>~/.claude/skills/',
+    no_templates:        '暂无模板',
+    history_empty_hint:  '选择会话后显示提问记录',
+    history_empty:       '暂无历史记录',
+    local:               '本地',
+    local_server_label:  '🖥 本地',
+    load_failed:         '加载失败',
     local_terminal:    '本地终端',
     ssh_terminal:      'SSH 终端',
     no_local_terminal: '暂无本地终端<br>点击 ＋ 新建',
     no_ssh_session:    '暂无 SSH 会话<br>点击 ＋ 新建',
     no_claude_session: '暂无 Claude 会话<br>点击 ＋ 新建',
+    session_exit_close: '会话已退出，2 秒后关闭卡片',
     add_connection:    '添加连接',
     new_ssh_terminal:  '新建 SSH 终端',
     connect_btn:       '连接',
@@ -2567,6 +2665,10 @@ const _i18n = {
     cc_terminal:       'Claude Code Terminal',
     status:            'Status',
     server_settings:   '⚙ Settings',
+    cfg_basic:         '⚙ Basic',
+    cfg_files:         '📁 Config Files',
+    cfg_tab_basic:     '⚙ Basic',
+    cfg_tab_files:     '📁 Config Files',
     im_channel:        'IM Bots',
     skills_market:     'Skills Market',
     install_btn:       'Install',
@@ -2644,11 +2746,25 @@ const _i18n = {
     toast_confirm_terminate: 'Terminate session "{name}"?',
     toast_confirm_delete_session: 'Are you sure you want to delete this session?',
     toast_confirm_delete_card: 'Are you sure you want to delete this card? (Running services will also stop)',
+
+    // Right sidebar
+    skills:              'Skills',
+    prompts:             'Prompts',
+    history_tab:         'History',
+    loading:             'Loading…',
+    no_skills:           'No skills found<br>~/.claude/skills/',
+    no_templates:        'No templates',
+    history_empty_hint:  'Select a session to view history',
+    history_empty:       'No history',
+    local:               'Local',
+    local_server_label:  '🖥 Local',
+    load_failed:         'Load failed',
     local_terminal:    'Local Terminal',
     ssh_terminal:      'SSH Terminal',
     no_local_terminal: 'No local terminals<br>Click ＋ to create',
     no_ssh_session:    'No SSH sessions<br>Click ＋ to create',
     no_claude_session: 'No Claude sessions<br>Click ＋ to create',
+    session_exit_close: 'Session exited, closing card in 2s',
     add_connection:    'Add Connection',
     new_ssh_terminal:  'New SSH Terminal',
     connect_btn:       'Connect',
@@ -3151,12 +3267,12 @@ function translateInstallLog(msg) {
 // ── Theme ─────────────────────────────────────────────────
 let _currentTheme = localStorage.getItem('cc_theme') || 'auto';
 
-// Get system theme preference
+// 获取系统主题偏好
 function getSystemTheme() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-// Get effective theme (considering auto mode)
+// 获取当前主题（考虑自动模式）
 function getEffectiveTheme() {
   if (_currentTheme === 'auto') {
     return getSystemTheme();
@@ -3164,6 +3280,7 @@ function getEffectiveTheme() {
   return _currentTheme;
 }
 
+// 应用主题
 function applyTheme(theme) {
   _currentTheme = theme;
   const effectiveTheme = getEffectiveTheme();
@@ -3391,7 +3508,7 @@ async function spLoadTrend() {
   }
 }
 
-// Background log poll (keeps badge updated even when status panel is closed)
+// 后台日志轮询（保持角标更新）
 async function _bgLogPoll() {
   try {
     const r = await fetch(`/api/log?after=${_logSeq}`);
@@ -3422,6 +3539,7 @@ window.addEventListener('resize', () => {
 
 // ── Toast ─────────────────────────────────────────────────
 let _ttimer;
+// 显示 Toast 消息
 function toast(msg, isErr = false) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -3459,7 +3577,7 @@ setInterval(async () => {
 }, 8000);
 
 // ── Init ──────────────────────────────────────────────────
-// Sidebar resize handler
+// 初始化左侧边栏拖动调整大小
 function initSidebarResize() {
   const handle = document.getElementById('sidebar-resize');
   const sidebar = document.getElementById('sidebar');
@@ -3505,6 +3623,63 @@ function initSidebarResize() {
   if (savedWidth) sidebar.style.width = savedWidth;
 }
 
+// 初始化右侧边栏拖动调整大小
+function initRightSidebarResize() {
+  const handle = document.getElementById('right-sidebar-resize');
+  const sidebar = document.getElementById('skills-sidebar');
+  if (!handle || !sidebar) {
+    console.warn('Right sidebar resize: handle or sidebar not found');
+    return;
+  }
+
+  let isResizing = false;
+  let startX = 0;
+  let startWidth = 0;
+  const DEFAULT_WIDTH = 190;
+
+  const onMouseDown = (e) => {
+    e.preventDefault();
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = sidebar.offsetWidth;
+    handle.classList.add('resizing');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const onMouseMove = (e) => {
+    if (!isResizing) return;
+    e.preventDefault();
+    const delta = startX - e.clientX;
+    const newWidth = Math.max(0, Math.min(500, startWidth + delta));
+    sidebar.style.width = newWidth + 'px';
+  };
+
+  const onMouseUp = () => {
+    if (isResizing) {
+      isResizing = false;
+      handle.classList.remove('resizing');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const finalWidth = parseInt(sidebar.style.width) || 0;
+      if (finalWidth <= 0) {
+        const savedWidth = localStorage.getItem('right-sidebar-width');
+        sidebar.style.width = savedWidth ? savedWidth : DEFAULT_WIDTH + 'px';
+      } else {
+        localStorage.setItem('right-sidebar-width', sidebar.style.width);
+      }
+    }
+  };
+
+  handle.addEventListener('mousedown', onMouseDown);
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+
+  // Restore from localStorage
+  const savedWidth = localStorage.getItem('right-sidebar-width');
+  if (savedWidth) sidebar.style.width = savedWidth;
+}
+
 window.addEventListener('load', async () => {
   // 先尝试恢复之前的会话
   await restoreSessionsFromStorage();
@@ -3518,6 +3693,7 @@ window.addEventListener('load', async () => {
 
   // 初始化侧边栏拖动调整大小
   initSidebarResize();
+  initRightSidebarResize();
 
   const srv = activeSrv();
 
@@ -3530,32 +3706,13 @@ window.addEventListener('load', async () => {
   await loadCards();
   startCardPoll();
   loadSkills();
-
-  // Auto-activate: prefer Feishu card (if running), then first Claude card
-  const feishuCard = _cards.find(c => c.type === 'feishu' && c.status && c.status.running);
-  if (feishuCard) {
-    _expandedCardId = feishuCard.id;
-    showFeishuView(feishuCard);
-    renderCards();
-  } else if (srv && srv.status === 'ok') {
-    // Connect running Claude sessions
-    try {
-      const r = await fetch('/api/sessions');
-      const data = await r.json();
-      for (const si of data.sessions) {
-        if (si.alive) connectSession(srv, si.name);
-      }
-    } catch (_) {}
-    // Expand first running Claude card
-    const claudeCard = _cards.find(c => c.type === 'claude' && c.status && c.status.running);
-    if (claudeCard) { _expandedCardId = claudeCard.id; renderCards(); }
-  }
 });
 
 // ── Scheduled tasks ────────────────────────────────────────
 let _tasks = [];
 let _editingTaskId = null;
 
+// 打开任务模态框
 async function openTasksModal() {
   document.getElementById('tasks-modal').classList.add('show');
   cancelAddTask();
@@ -3570,11 +3727,13 @@ async function openTasksModal() {
   }
 }
 
+// 关闭任务模态框
 function closeTasksModal(ev) {
   if (ev && ev.target !== document.getElementById('tasks-modal')) return;
   document.getElementById('tasks-modal').classList.remove('show');
 }
 
+// 加载任务列表
 async function loadTasks() {
   try {
     const r = await fetch('/api/tasks');
@@ -3584,6 +3743,7 @@ async function loadTasks() {
   } catch (_) {}
 }
 
+// 渲染任务列表
 function renderTaskList() {
   const list = document.getElementById('task-list');
   if (!_tasks.length) {
@@ -3620,6 +3780,7 @@ function renderTaskList() {
   }
 }
 
+// 打开新建任务表单
 function openAddTask() {
   _editingTaskId = null;
   document.getElementById('task-form-title').textContent = '新建任务';
@@ -3634,6 +3795,7 @@ function openAddTask() {
   document.getElementById('task-form').style.display = '';
 }
 
+// 编辑任务
 function editTask(id) {
   const t = _tasks.find(x => x.id === id);
   if (!t) return;
@@ -3651,16 +3813,19 @@ function editTask(id) {
   document.getElementById('task-form').style.display = '';
 }
 
+// 取消新建任务
 function cancelAddTask() {
   _editingTaskId = null;
   document.getElementById('task-form').style.display = 'none';
 }
 
+// 切换任务类型（interval/cron）
 function tfScheduleType(type) {
   document.getElementById('tf-interval-f').style.display = type === 'interval' ? '' : 'none';
   document.getElementById('tf-cron-f').style.display     = type === 'cron'     ? '' : 'none';
 }
 
+// 提交保存任务
 async function submitTask() {
   const stype = document.querySelector('input[name="tf-stype"]:checked')?.value || 'interval';
   const payload = {
@@ -3685,6 +3850,7 @@ async function submitTask() {
   } catch (e) { toast(e.message, true); }
 }
 
+// 删除任务
 async function deleteTask(id) {
   if (!confirm('确认删除该定时任务？')) return;
   await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
@@ -3692,6 +3858,7 @@ async function deleteTask(id) {
   toast('任务已删除');
 }
 
+// 切换任务启用状态
 async function toggleTask(id, enable) {
   await fetch(`/api/tasks/${id}`, { method: 'PATCH',
     headers: {'Content-Type':'application/json'},
@@ -3699,11 +3866,13 @@ async function toggleTask(id, enable) {
   await loadTasks();
 }
 
+// 立即运行任务
 async function runTaskNow(id) {
   const r = await fetch(`/api/tasks/${id}/run`, { method: 'POST' });
   if (r.ok) toast('已触发任务');
 }
 
+// 退出登录
 async function doLogout() {
   await fetch('/logout', { method: 'POST' });
   window.location.href = '/login';
@@ -3713,6 +3882,7 @@ async function doLogout() {
 let _prompts = [];
 let _promptEditId = null;
 
+// 加载提示词模板
 async function loadPrompts() {
   try {
     const r = await fetch('/api/prompts');
@@ -3723,12 +3893,14 @@ async function loadPrompts() {
 }
 
 // ── Prompt管理 modal (header button) ──────────────────────
+// 打开提示词管理模态框
 async function openPromptMgmt() {
   document.getElementById('prompt-mgmt-overlay').classList.add('show');
   await loadPrompts();
   resetPromptForm();
 }
 
+// 关闭提示词管理模态框
 function closePromptMgmt(ev) {
   if (ev && ev.target !== document.getElementById('prompt-mgmt-overlay')) return;
   document.getElementById('prompt-mgmt-overlay').classList.remove('show');
@@ -3806,6 +3978,7 @@ async function deletePrompt(id) {
 }
 
 // ── 右侧栏 Prompt 面板（使用） ─────────────────────────────
+// 筛选提示词（搜索）
 function filterPrompts() {
   const q = document.getElementById('prompt-search').value.toLowerCase();
   renderPrompts(q ? _prompts.filter(p =>
@@ -3813,11 +3986,12 @@ function filterPrompts() {
   ) : _prompts);
 }
 
+// 渲染提示词列表
 function renderPrompts(list) {
   const el = document.getElementById('prompt-list');
   if (!el) return;
   if (!list.length) {
-    el.innerHTML = '<div class="skills-empty">暂无模板</div>';
+    el.innerHTML = '<div class="skills-empty">' + t('no_templates') + '</div>';
     return;
   }
   el.innerHTML = '';
@@ -3831,6 +4005,7 @@ function renderPrompts(list) {
   }
 }
 
+// 插入提示词到当前会话
 function insertPrompt(text) {
   const srv = activeSrv();
   if (!srv || !srv.activeSession) { toast('请先连接一个 Claude 会话', true); return; }
@@ -3844,16 +4019,19 @@ function insertPrompt(text) {
 // ── MCP Market ────────────────────────────────────────────────
 let _mcpData = { servers: {}, presets: [] };
 
+// 打开 MCP 市场模态框
 async function openMcpModal() {
   document.getElementById('mcp-overlay').classList.add('show');
   await loadMcpData();
 }
 
+// 关闭 MCP 市场模态框
 function closeMcpModal(ev) {
   if (ev && ev.target !== document.getElementById('mcp-overlay')) return;
   document.getElementById('mcp-overlay').classList.remove('show');
 }
 
+// 加载 MCP 数据
 async function loadMcpData() {
   try {
     const r = await fetch('/api/mcp');
@@ -3865,6 +4043,7 @@ async function loadMcpData() {
   }
 }
 
+// 渲染已安装的 MCP 服务器
 function renderMcpInstalled() {
   const list = document.getElementById('mcp-installed-list');
   const servers = _mcpData.servers || {};
@@ -3881,6 +4060,7 @@ function renderMcpInstalled() {
   ).join('');
 }
 
+// 渲染 MCP 预设列表
 function renderMcpPresets() {
   const grid = document.getElementById('mcp-preset-grid');
   const installed = new Set(Object.keys(_mcpData.servers || {}));
@@ -3900,6 +4080,7 @@ function renderMcpPresets() {
   }).join('');
 }
 
+// 安装 MCP 预设
 async function mcpInstallPreset(preset) {
   const st = document.getElementById('mcp-status');
   st.textContent = `安装 ${preset.label}…`;

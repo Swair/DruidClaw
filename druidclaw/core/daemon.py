@@ -1,6 +1,6 @@
 """
 DruidClaw Daemon: manages multiple ClaudeSession instances.
-Exposes a Unix socket for IPC with cc client processes.
+Exposes a Unix socket (or TCP on Windows) for IPC with cc client processes.
 
 Protocol: newline-delimited JSON (request/response).
 For "attach" command: bidirectional raw byte streaming after ack.
@@ -13,16 +13,31 @@ import signal
 import threading
 import logging
 import time
-import select
 from pathlib import Path
 from typing import Optional
+
+# Platform detection
+IS_WINDOWS = os.name == "nt"
+
+if not IS_WINDOWS:
+    import select
 
 from .session import ClaudeSession
 
 logger = logging.getLogger(__name__)
 
-RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", os.path.expanduser("~/.app/run")))
-SOCKET_PATH = RUN_DIR / "daemon.sock"
+# On Windows, use TCP socket instead of Unix socket
+if IS_WINDOWS:
+    RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", Path.cwd() / ".druidclaw"))
+    SOCKET_PATH = None  # Not used on Windows
+    TCP_HOST = "127.0.0.1"
+    TCP_PORT = 19124  # Daemon IPC port
+else:
+    RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", os.path.expanduser("~/.app/run")))
+    SOCKET_PATH = RUN_DIR / "daemon.sock"
+    TCP_HOST = None
+    TCP_PORT = None
+
 PID_FILE = RUN_DIR / "daemon.pid"
 
 # Detach signal (3 bytes 0xff from client)
@@ -49,21 +64,32 @@ class CCDaemon:
         RUN_DIR.mkdir(parents=True, exist_ok=True)
         PID_FILE.write_text(str(os.getpid()))
 
-        if SOCKET_PATH.exists():
-            SOCKET_PATH.unlink()
-
-        self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._sock.bind(str(SOCKET_PATH))
-        self._sock.listen(32)
-        self._sock.settimeout(1.0)
-        os.chmod(str(SOCKET_PATH), 0o600)
+        if IS_WINDOWS:
+            # Windows: use TCP socket
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._sock.bind((TCP_HOST, TCP_PORT))
+            self._sock.listen(32)
+            self._sock.settimeout(1.0)
+            logger.info(f"CC Daemon started (pid={os.getpid()}) tcp={TCP_HOST}:{TCP_PORT}")
+        else:
+            # Unix: use Unix domain socket
+            if SOCKET_PATH.exists():
+                SOCKET_PATH.unlink()
+            self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._sock.bind(str(SOCKET_PATH))
+            self._sock.listen(32)
+            self._sock.settimeout(1.0)
+            os.chmod(str(SOCKET_PATH), 0o600)
+            logger.info(f"CC Daemon started (pid={os.getpid()}) socket={SOCKET_PATH}")
 
         self._running = True
         logger.info(f"CC Daemon started (pid={os.getpid()}) socket={SOCKET_PATH}")
 
-        signal.signal(signal.SIGTERM, self._handle_sigterm)
-        signal.signal(signal.SIGINT, self._handle_sigterm)
-        signal.signal(signal.SIGCHLD, signal.SIG_DFL)
+        if not IS_WINDOWS:
+            signal.signal(signal.SIGTERM, self._handle_sigterm)
+            signal.signal(signal.SIGINT, self._handle_sigterm)
+            signal.signal(signal.SIGCHLD, signal.SIG_DFL)
 
         watchdog = threading.Thread(target=self._watchdog, daemon=True)
         watchdog.start()
@@ -97,7 +123,8 @@ class CCDaemon:
                 self._sock.close()
             except Exception:
                 pass
-        SOCKET_PATH.unlink(missing_ok=True)
+        if not IS_WINDOWS and SOCKET_PATH:
+            SOCKET_PATH.unlink(missing_ok=True)
         PID_FILE.unlink(missing_ok=True)
         logger.info("CC Daemon stopped")
 
@@ -123,13 +150,27 @@ class CCDaemon:
         try:
             conn.settimeout(30)
             while True:
-                r, _, _ = select.select([conn], [], [], 1.0)
-                if not r:
-                    continue
-                chunk = conn.recv(4096)
-                if not chunk:
-                    break
-                buf += chunk
+                if IS_WINDOWS:
+                    # Windows: use recv() with timeout
+                    conn.setblocking(False)
+                    try:
+                        chunk = conn.recv(4096)
+                        if not chunk:
+                            break
+                        buf += chunk
+                    except BlockingIOError:
+                        time.sleep(0.01)
+                        continue
+                else:
+                    # Unix: use select()
+                    r, _, _ = select.select([conn], [], [], 1.0)
+                    if not r:
+                        continue
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    buf += chunk
+
                 while b"\n" in buf:
                     line, buf = buf.split(b"\n", 1)
                     line = line.strip()
@@ -371,44 +412,70 @@ class CCDaemon:
 # ------------------------------------------------------------------ #
 
 def run_daemon(foreground: bool = False):
-    if not foreground:
+    if not IS_WINDOWS and not foreground:
         _daemonize()
 
     RUN_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Setup logging
+    log_file = RUN_DIR / "daemon.log"
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[logging.FileHandler(str(RUN_DIR / "daemon.log"), mode="a")],
+        handlers=[logging.FileHandler(str(log_file), mode="a")],
     )
+
     daemon = CCDaemon()
     daemon.start()
 
 
 def is_daemon_running() -> bool:
-    if not SOCKET_PATH.exists():
+    if IS_WINDOWS:
+        # Windows: try TCP connection
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect((TCP_HOST, TCP_PORT))
+            s.sendall(json.dumps({"cmd": "ping"}).encode() + b"\n")
+            buf = b""
+            while b"\n" not in buf:
+                chunk = s.recv(256)
+                if not chunk:
+                    break
+                buf += chunk
+            s.close()
+            if buf:
+                r = json.loads(buf.split(b"\n")[0])
+                return r.get("pong", False)
+        except Exception:
+            pass
         return False
-    # Try to connect
-    try:
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(2.0)
-        s.connect(str(SOCKET_PATH))
-        s.sendall(json.dumps({"cmd": "ping"}).encode() + b"\n")
-        buf = b""
-        while b"\n" not in buf:
-            chunk = s.recv(256)
-            if not chunk:
-                break
-            buf += chunk
-        s.close()
-        if buf:
-            r = json.loads(buf.split(b"\n")[0])
-            return r.get("pong", False)
-    except Exception:
-        pass
-    return False
+    else:
+        # Unix: check socket file
+        if not SOCKET_PATH.exists():
+            return False
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(str(SOCKET_PATH))
+            s.sendall(json.dumps({"cmd": "ping"}).encode() + b"\n")
+            buf = b""
+            while b"\n" not in buf:
+                chunk = s.recv(256)
+                if not chunk:
+                    break
+                buf += chunk
+            s.close()
+            if buf:
+                r = json.loads(buf.split(b"\n")[0])
+                return r.get("pong", False)
+        except Exception:
+            pass
+        return False
 
 
 def _daemonize():
+    """Unix-only: fork into background daemon process."""
     if os.fork() > 0:
         sys.exit(0)
     os.setsid()

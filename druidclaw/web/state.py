@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Optional
 
 from druidclaw.core.session import ClaudeSession
-from druidclaw.imbot.feishu import FeishuBot
-from druidclaw.imbot.telegram import TelegramBot
-from druidclaw.imbot.dingtalk import DingtalkBot
-from druidclaw.imbot.qq import QQBot
-from druidclaw.imbot.wework import WeWorkBot
+from druidclaw.core.imbot.feishu import FeishuBot
+from druidclaw.core.imbot.telegram import TelegramBot
+from druidclaw.core.imbot.dingtalk import DingtalkBot
+from druidclaw.core.imbot.qq import QQBot
+from druidclaw.core.imbot.wework import WeWorkBot
 
 logger = _logging.getLogger(__name__)
 

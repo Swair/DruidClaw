@@ -17,6 +17,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
+IS_WINDOWS = sys.platform == "win32"
+if IS_WINDOWS:
+    import msvcrt
+
 from .daemon import SOCKET_PATH, RUN_DIR
 
 
@@ -107,9 +111,8 @@ def attach_to_session(name: str, client: "DaemonClient | None" = None):
     """
     Attach the current terminal to a session managed by the daemon.
 
-    Since the daemon holds the PTY master fd (in another process), we
-    cannot directly share fd. Instead we stream I/O over the Unix socket
-    using a dedicated "attach" protocol built on top of the existing connection.
+    On Unix: uses Unix domain sockets with PTY.
+    On Windows: uses TCP sockets with console I/O.
 
     Protocol:
       Client sends: {"cmd": "attach", "name": "..."}
@@ -117,6 +120,78 @@ def attach_to_session(name: str, client: "DaemonClient | None" = None):
       Then raw bytes are streamed bidirectionally.
       Client sends: b"\xff\xff\xff" to detach.
     """
+    if IS_WINDOWS:
+        _attach_to_session_windows(name, client)
+    else:
+        _attach_to_session_unix(name, client)
+
+
+def _attach_to_session_windows(name: str, client: "DaemonClient | None" = None):
+    """Windows-specific attach using TCP socket and console I/O."""
+    # Use TCP connection for Windows
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect(("localhost", 19124))
+
+    # Send attach command
+    msg = json.dumps({"cmd": "attach", "name": name}).encode() + b"\n"
+    sock.sendall(msg)
+
+    # Read ack
+    buf = b""
+    while b"\n" not in buf:
+        buf += sock.recv(256)
+    line, _ = buf.split(b"\n", 1)
+    ack = json.loads(line)
+    if "error" in ack:
+        sock.close()
+        print(f"Error: {ack['error']}", file=sys.stderr)
+        return
+
+    print(f"[Attached to '{name}' -- press Ctrl-Z to detach]\r")
+
+    stop_event = threading.Event()
+
+    def reader():
+        """Read from socket, write to stdout."""
+        while not stop_event.is_set():
+            try:
+                data = sock.recv(4096)
+                if not data:
+                    stop_event.set()
+                    break
+                sys.stdout.buffer.write(data)
+                sys.stdout.buffer.flush()
+            except OSError:
+                stop_event.set()
+                break
+
+    reader_thread = threading.Thread(target=reader, daemon=True)
+    reader_thread.start()
+
+    try:
+        while not stop_event.is_set():
+            if msvcrt.kbhit():
+                char = msvcrt.getwch()
+                if char == '\x1a':  # Ctrl-Z = detach
+                    try:
+                        sock.sendall(b"\xff\xff\xff")
+                    except OSError:
+                        pass
+                    print("\r\n[Detached]", flush=True)
+                    break
+                sock.sendall(char.encode('utf-8'))
+            time.sleep(0.05)  # Prevent CPU spinning
+    finally:
+        stop_event.set()
+        reader_thread.join(timeout=1)
+        sock.close()
+
+
+def _attach_to_session_unix(name: str, client: "DaemonClient | None" = None):
+    """Unix-specific attach using Unix domain socket and PTY."""
+    import select
+    import signal
+
     # We need a separate connection for the streaming attach
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.connect(str(SOCKET_PATH))

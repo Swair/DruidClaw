@@ -44,7 +44,7 @@ async function killActive() {
   if (s) { s.status = 'dead'; renderSessionList(); updateToolbar(); }
 }
 
-// 连接会话（内部函数）
+// 连接会话到终端（内部函数）
 function connectSession(srv, name) {
   srv.activeSession = name;
   renderSessionList();
@@ -83,12 +83,37 @@ function connectSession(srv, name) {
       toast(`已连接 "${name}" (pid=${msg.pid})`);
     } else if (msg.type === 'exit') {
       srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write('\r\n\x1b[33m[会话已退出]\x1b[0m\r\n');
+      renderSessionList(); updateToolbar(); renderCards();
+      term.write(`\r\n\x1b[33m[${t('session_exit_close')}]\x1b[0m\r\n`);
+      setTimeout(() => {
+        // 删除 _cards 中对应的 Claude 卡片（静默删除，无需确认）
+        const card = _cards.find(c => c.type === 'claude' && c.name === name);
+        if (card) {
+          // 直接调用 API 删除，跳过确认对话框
+          fetch(`/api/cards/${card.id}`, {method:'DELETE'}).catch(()=>{});
+          if (_expandedCardId === card.id) _expandedCardId = null;
+          loadCards();
+        }
+        // 删除会话
+        if (srv.sessions[name]) {
+          killSessionByName(srv.id, name);
+        }
+      }, 2000);
     } else if (msg.type === 'error') {
       srv.sessions[name].status = 'dead';
-      renderSessionList(); updateToolbar();
-      term.write(`\r\n\x1b[31m[错误：${msg.message}]\x1b[0m\r\n`);
+      renderSessionList(); updateToolbar(); renderCards();
+      term.write(`\r\n\x1b[31m[${t('error')}: ${msg.message}]\x1b[0m\r\n`);
+      setTimeout(() => {
+        const card = _cards.find(c => c.type === 'claude' && c.name === name);
+        if (card) {
+          fetch(`/api/cards/${card.id}`, {method:'DELETE'}).catch(()=>{});
+          if (_expandedCardId === card.id) _expandedCardId = null;
+          loadCards();
+        }
+        if (srv.sessions[name]) {
+          killSessionByName(srv.id, name);
+        }
+      }, 3000);
     }
   };
   ws.onclose = () => {
@@ -96,6 +121,7 @@ function connectSession(srv, name) {
       srv.sessions[name].status = 'dead';
       renderSessionList(); updateToolbar();
     }
+    // 如果会话已 dead，ws.onclose 时不再触发任何操作，让 exit handler 的定时器处理
   };
   term.onData(data => {
     if (ws.readyState === WebSocket.OPEN) {

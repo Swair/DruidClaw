@@ -48,7 +48,7 @@
       <span class="log-badge" id="log-badge"></span>
     </button>
   </div>
-  <button class="tbtn" onclick="openSrvSettings()" title="当前服务器设置">⚙ 服务器设置</button>
+  <button class="tbtn" onclick="openSrvSettings()" title="当前服务器设置">⚙ <span data-i18n="server_settings_text">服务器设置</span></button>
   <button class="tbtn" onclick="doLogout()" title="退出登录" style="margin-left:8px">⎋ <span data-i18n="logout">退出</span></button>
 </div>
 
@@ -138,16 +138,19 @@
   <!-- Right sidebar (Skills + Prompts + History) -->
   <div class="skills-sidebar" id="skills-sidebar">
     <!-- Tab row -->
-    <div class="sk-tabs">
+    <div class="sk-tabs" style="position:relative;z-index:1">
       <button class="sk-tab active" id="sk-tab-skills"  onclick="switchRightTab('skills')">🧙‍♂️ Skills</button>
       <button class="sk-tab"        id="sk-tab-prompts" onclick="switchRightTab('prompts')">📝 <span data-i18n="prompts">Prompt</span></button>
       <button class="sk-tab"        id="sk-tab-history" onclick="switchRightTab('history')">💬 <span data-i18n="history_tab">提问历史</span></button>
     </div>
 
+    <!-- Resize handle (after sk-tabs, higher z-index) -->
+    <div class="sidebar-resize-handle" id="right-sidebar-resize" title="拖动调整宽度"></div>
+
     <!-- Skills pane -->
     <div id="right-pane-skills" class="right-pane">
       <div class="skills-hdr" style="padding-top:4px">
-        <span class="skills-hdr-title">Skills</span>
+        <span class="skills-hdr-title" data-i18n="skills">Skills</span>
         <span class="skills-reload" onclick="loadSkills()" title="刷新">↻</span>
       </div>
       <div class="skills-list" id="skills-list">
@@ -177,6 +180,8 @@
       </div>
     </div>
   </div>
+  <!-- Right sidebar resize handle (outside sidebar, like left sidebar) -->
+  <div class="sidebar-resize-handle" id="right-sidebar-resize" title="拖动调整宽度"></div>
 </div>
 
 <!-- Skills Marketplace modal -->
@@ -631,11 +636,11 @@
 <!-- Server settings modal (edit current + save/restart) -->
 <div class="overlay" id="cfg-modal" onclick="closeCfgModal(event)">
   <div class="modal" onclick="event.stopPropagation()" style="width:min(660px,96vw);max-height:85vh;display:flex;flex-direction:column">
-    <h3 style="flex-shrink:0">⚙ 服务器设置</h3>
+    <h3 style="flex-shrink:0">⚙ <span data-i18n="server_settings">服务器设置</span></h3>
     <!-- Tab labels -->
     <div class="sp-tabs" style="margin-bottom:12px;flex-shrink:0">
-      <div class="sp-tab active" id="cfg-tab-basic" onclick="cfgTab('basic')">⚙ 基本设置</div>
-      <div class="sp-tab"        id="cfg-tab-files" onclick="cfgTab('files')">📁 配置文件参考</div>
+      <div class="sp-tab active" id="cfg-tab-basic" onclick="cfgTab('basic')">⚙ <span data-i18n="cfg_basic">基本设置</span></div>
+      <div class="sp-tab"        id="cfg-tab-files" onclick="cfgTab('files')">📁 <span data-i18n="cfg_files">配置文件参考</span></div>
     </div>
     <!-- Pane: basic settings -->
     <div id="cfg-pane-basic">

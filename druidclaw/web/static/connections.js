@@ -11,7 +11,9 @@ let servers = [];       // ordered list
 let activeSrvId = null;
 let _srvIdSeq = 0;
 
+// 根据 ID 获取服务器
 function srvById(id) { return servers.find(s => s.id === id); }
+// 获取当前活动服务器
 function activeSrv() { return srvById(activeSrvId); }
 
 // Session persistence
@@ -74,6 +76,7 @@ async function deleteSshHistory(idx) {
 
 // ── Add / switch / remove server ───────────────────────────
 // 用户添加新的 HTTP 服务器
+// 添加新的 HTTP 服务器
 async function addServer(host, port, label) {
   const id = `srv${++_srvIdSeq}`;
   const srv = {
@@ -92,6 +95,7 @@ async function addServer(host, port, label) {
 }
 
 // 用户点击服务器标签切换
+// 切换服务器
 async function switchServer(id) {
   activeSrvId = id;
   _expandedSessionCard = null;  // 清除展开状态
@@ -134,7 +138,7 @@ function removeServer(id) {
   saveSessionsToStorage();
 }
 
-// 用户点击 SSH/本地服务器的"＋"按钮创建新会话
+// 为服务器添加新会话（SSH/本地）
 async function addSessionToServer(id) {
   const srv = srvById(id);
   if (!srv) return;
@@ -181,6 +185,7 @@ async function addSessionToServer(id) {
 }
 
 // ── Server bar render ──────────────────────────────────────
+// 渲染服务器栏
 function renderServerBar() {
   const bar = document.getElementById('server-bar');
   const addBtn = bar.querySelector('.srv-add');
@@ -212,12 +217,13 @@ function renderServerBar() {
 // ── Add-server modal ───────────────────────────────────────
 let _srvEditId = null;
 
+// 关闭服务器模态框
 function closeSrvModal(ev) {
   if (ev && ev.target !== document.getElementById('srv-modal')) return;
   document.getElementById('srv-modal').classList.remove('show');
 }
 
-// 用户点击"连接"按钮提交连接
+// 提交连接表单
 async function commitServer() {
   // 如果是为已有 SSH 服务器添加新会话
   if (_srvEditId !== null) {
@@ -256,6 +262,7 @@ async function commitServer() {
 }
 
 // ── Session persistence ────────────────────────────────────
+// 保存会话到 sessionStorage
 function saveSessionsToStorage() {
   try {
     const sessionData = servers.map(srv => ({
@@ -277,6 +284,7 @@ function saveSessionsToStorage() {
   } catch (e) { console.warn('Failed to save sessions:', e); }
 }
 
+// 从 sessionStorage 恢复会话
 async function restoreSessionsFromStorage() {
   try {
     const data = sessionStorage.getItem(SESSION_STORAGE_KEY);

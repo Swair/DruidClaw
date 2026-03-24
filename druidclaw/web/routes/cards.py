@@ -132,7 +132,16 @@ def _do_start_card(card: dict) -> dict:
                                 auto_approve=auto_approve,
                                 workdir=workdir)
         bot._reply_delay = delay
-        return {"auto_session": auto_sess}
+        # Also create a Claude session for the card itself
+        session_name = card.get("name", f"fbs_card_{card['id'][:6]}")
+        try:
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        except ValueError:
+            remove_session(session_name, force=True)
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        return {"auto_session": auto_sess, "session": session_name}
 
     elif ctype == "telegram":
         token = card.get("token", "")
@@ -147,7 +156,16 @@ def _do_start_card(card: dict) -> dict:
                                   auto_approve=auto_approve,
                                   workdir=workdir)
         bot._reply_delay = delay
-        return {"auto_session": auto_sess}
+        # Also create a Claude session for the card itself
+        session_name = card.get("name", f"tgb_card_{card['id'][:6]}")
+        try:
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        except ValueError:
+            remove_session(session_name, force=True)
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        return {"auto_session": auto_sess, "session": session_name}
 
     elif ctype == "dingtalk":
         app_key = card.get("app_key", "") or card.get("app_id", "")
@@ -164,7 +182,16 @@ def _do_start_card(card: dict) -> dict:
                                   auto_approve=auto_approve,
                                   workdir=workdir)
         bot._reply_delay = delay
-        return {"auto_session": auto_sess}
+        # Also create a Claude session for the card itself
+        session_name = card.get("name", f"dtb_card_{card['id'][:6]}")
+        try:
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        except ValueError:
+            remove_session(session_name, force=True)
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        return {"auto_session": auto_sess, "session": session_name}
 
     elif ctype == "qq":
         ws_url = card.get("ws_url", "")
@@ -181,7 +208,16 @@ def _do_start_card(card: dict) -> dict:
                             auto_approve=auto_approve,
                             workdir=workdir)
         bot._reply_delay = delay
-        return {"auto_session": auto_sess}
+        # Also create a Claude session for the card itself
+        session_name = card.get("name", f"qqb_card_{card['id'][:6]}")
+        try:
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        except ValueError:
+            remove_session(session_name, force=True)
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        return {"auto_session": auto_sess, "session": session_name}
 
     elif ctype == "wework":
         corp_id = card.get("corp_id", "")
@@ -201,7 +237,16 @@ def _do_start_card(card: dict) -> dict:
                                 auto_approve=auto_approve,
                                 workdir=workdir)
         bot._reply_delay = delay
-        return {"auto_session": auto_sess, "webhook_path": f"/webhook/wecom/{card['id']}"}
+        # Also create a Claude session for the card itself
+        session_name = card.get("name", f"wwb_card_{card['id'][:6]}")
+        try:
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        except ValueError:
+            remove_session(session_name, force=True)
+            create_session(name=session_name, workdir=workdir,
+                          claude_args=["--dangerously-skip-permissions"] if auto_approve else [])
+        return {"auto_session": auto_sess, "webhook_path": f"/webhook/wecom/{card['id']}", "session": session_name}
 
     return {}
 
@@ -212,14 +257,19 @@ def _do_stop_card(card: dict):
         remove_session(card.get("name", ""), force=False)
     elif ctype == "feishu":
         _stop_feishu_bot(card_id=card.get("id", "__legacy__"))
+        remove_session(card.get("name", ""), force=False)
     elif ctype == "telegram":
         _stop_telegram_bot(card_id=card.get("id", ""))
+        remove_session(card.get("name", ""), force=False)
     elif ctype == "dingtalk":
         _stop_dingtalk_bot(card_id=card.get("id", ""))
+        remove_session(card.get("name", ""), force=False)
     elif ctype == "qq":
         _stop_qq_bot(card_id=card.get("id", ""))
+        remove_session(card.get("name", ""), force=False)
     elif ctype == "wework":
         _stop_wework_bot(card_id=card.get("id", ""))
+        remove_session(card.get("name", ""), force=False)
 
 
 # ── Pydantic models ───────────────────────────────────────────────
@@ -441,5 +491,7 @@ def api_cards_stop(card_id: str):
         card = next((c for c in _cards if c["id"] == card_id), None)
     if card is None:
         raise HTTPException(404, "Card not found")
+    logger.info(f"Stopping card: {card_id} (type={card.get('type')}, name={card.get('name')})")
     _do_stop_card(card)
-    return {"ok": True}
+    # Return updated status for immediate UI refresh
+    return {"ok": True, **_card_runtime_status(card)}

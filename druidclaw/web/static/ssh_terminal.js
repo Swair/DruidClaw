@@ -4,7 +4,7 @@
  * 管理 SSH 远程终端连接
  */
 
-// 用户点击 SSH 服务器"+"按钮 - 使用已有参数创建新会话
+// 为 SSH 服务器添加新会话
 async function addSshSessionToCurrentServer() {
   const srv = activeSrv();
   if (!srv || srv.type !== 'ssh') return;
@@ -24,7 +24,7 @@ async function addSshSessionToCurrentServer() {
   saveSessionsToStorage();
 }
 
-// 用户从模态框创建 SSH 连接
+// 从模态框创建 SSH 连接
 async function connectSSH() {
   const host  = document.getElementById('ssh-host').value.trim();
   const user  = document.getElementById('ssh-user').value.trim();

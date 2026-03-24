@@ -4,12 +4,12 @@
  * 管理本地终端连接
  */
 
-// 用户点击"新建本地终端"快捷按钮
+// 为当前服务器添加新会话
 async function addLocalSessionToCurrentServer() {
   let localSrv = servers.find(s => s.type === 'local');
   if (!localSrv) {
     const srvId = `term${++_srvIdSeq}`;
-    localSrv = { id:srvId, label:'🖥 本地', type:'local',
+    localSrv = { id:srvId, label: t('local_server_label'), type:'local',
                   status:'ok', sessions:{}, activeSession:null, terms:{} };
     servers.push(localSrv);
     activeSrvId = srvId;
@@ -25,7 +25,7 @@ async function addLocalSessionToCurrentServer() {
   saveSessionsToStorage();
 }
 
-// 用户从模态框创建本地终端
+// 从模态框创建本地终端
 async function connectLocalShell() {
   const shellOverride = document.getElementById('local-shell')?.value.trim() || '';
   closeSrvModal();
@@ -33,7 +33,7 @@ async function connectLocalShell() {
   const sessName = `local_${Date.now()%10000}`;
   if (!localSrv) {
     const srvId = `term${++_srvIdSeq}`;
-    localSrv = { id:srvId, label:'🖥 本地', type:'local',
+    localSrv = { id:srvId, label: t('local_server_label'), type:'local',
                   status:'ok', sessions:{}, activeSession:null, terms:{} };
     servers.push(localSrv);
     activeSrvId = srvId;

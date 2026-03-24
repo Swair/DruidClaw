@@ -1,5 +1,6 @@
 """SSH and local shell WebSocket routes."""
 import os
+import sys
 import json
 import asyncio
 import logging
@@ -28,7 +29,16 @@ router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
-_LOCAL_SHELL = os.environ.get("SHELL", "/bin/bash")
+IS_WINDOWS = sys.platform == "win32"
+
+# Windows: use powershell or cmd; Unix: use $SHELL or /bin/bash
+if IS_WINDOWS:
+    # Try powershell first, then cmd
+    _LOCAL_SHELL = os.environ.get("COMSPEC", "cmd.exe")
+    if os.path.exists(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"):
+        _LOCAL_SHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+else:
+    _LOCAL_SHELL = os.environ.get("SHELL", "/bin/bash")
 _ssh_history_lock = _threading.Lock()
 
 # 保存断开的会话资源，用于页面刷新后重连
