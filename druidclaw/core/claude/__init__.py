@@ -2,29 +2,25 @@
 Claude Code session management.
 
 High-level session management for Claude Code, built on top of the
-cross-platform PTY abstraction layer (pty_wrapper).
+cross-platform platform abstraction layer.
 
-This module is platform-agnostic - all OS-specific code is in pty_wrapper.py.
+This module is platform-agnostic:
+- Unix/Linux/macOS: Uses PtySession (pty)
+- Windows: Uses ConPtySession (winpty)
 """
 import os
 import threading
 import logging
-import signal
-import termios
-import struct
-import select
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Callable
 
-from .pty_wrapper import PTYSession
-
+from ..platform import create_session, IS_WINDOWS
 
 logger = logging.getLogger(__name__)
 
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
-LOG_DIR = Path(os.environ.get("DRUIDCLAW_LOG_DIR",
-               str(Path(__file__).resolve().parent.parent.parent.parent / "log")))
+LOG_DIR = Path(os.environ.get("DRUIDCLAW_LOG_DIR", Path.cwd() / "run" / "logs"))
 
 
 class IORecorder:
@@ -93,10 +89,14 @@ class ClaudeSession:
     """
     Manages a single Claude Code session.
 
-    This is a high-level wrapper around PTYSession that adds:
+    This is a high-level wrapper around the cross-platform session that adds:
     - I/O recording (logging)
     - Session metadata (name, workdir, created_at)
     - Output buffering for detached viewing
+
+    Platform support:
+    - Unix/Linux/macOS: Full PTY support
+    - Windows: Requires pywinpty (pip install pywinpty)
     """
 
     def __init__(
@@ -119,7 +119,11 @@ class ClaudeSession:
             self.recorder = IORecorder(name)
 
         cmd = [CLAUDE_BIN] + self.claude_args
-        self._pty_session = PTYSession(
+
+        # Use cross-platform session factory
+        # Note: _session is now the platform-agnostic session instance
+        self._session = create_session(
+            name=name,
             cmd=cmd,
             workdir=self.workdir,
             env={},
@@ -129,47 +133,47 @@ class ClaudeSession:
 
     @property
     def _running(self) -> bool:
-        return self._pty_session._running
+        return self._session._running
 
     @_running.setter
     def _running(self, value: bool):
-        self._pty_session._running = value
+        self._session._running = value
 
     @property
     def pid(self) -> Optional[int]:
-        return self._pty_session.pid
+        return self._session.pid
 
     @property
     def _reader_thread(self) -> Optional[threading.Thread]:
-        return self._pty_session._reader_thread
+        return self._session._reader_thread
 
     @_reader_thread.setter
     def _reader_thread(self, value: Optional[threading.Thread]):
-        self._pty_session._reader_thread = value
+        self._session._reader_thread = value
 
     @property
     def _output_callbacks(self) -> list:
-        return self._pty_session._output_callbacks
+        return self._session._output_callbacks
 
     @_output_callbacks.setter
     def _output_callbacks(self, value: list):
-        self._pty_session._output_callbacks = value
+        self._session._output_callbacks = value
 
     @property
     def _buf(self) -> bytearray:
-        return self._pty_session._buf
+        return self._session._buf
 
     @_buf.setter
     def _buf(self, value: bytearray):
-        self._pty_session._buf = value
+        self._session._buf = value
 
     @property
     def _buf_lock(self) -> threading.Lock:
-        return self._pty_session._buf_lock
+        return self._session._buf_lock
 
     @_buf_lock.setter
     def _buf_lock(self, value: threading.Lock):
-        self._pty_session._buf_lock = value
+        self._session._buf_lock = value
 
     def start(self):
         """Start Claude Code process."""
@@ -183,28 +187,28 @@ class ClaudeSession:
                 self.recorder.record_output(data)
 
         if _recording_wrapper not in original_callbacks:
-            self._pty_session._output_callbacks.append(_recording_wrapper)
+            self._output_callbacks.append(_recording_wrapper)
 
-        self._pty_session.start()
+        self._session.start()
         logger.info(f"Session '{self.name}' started (pid={self.pid})")
 
     def stop(self, timeout: float = 3.0):
         """Stop session gracefully."""
-        self._pty_session.stop(timeout=timeout)
+        self._session.stop(timeout=timeout)
         if self.recorder:
             self.recorder.close()
         logger.info(f"Session '{self.name}' stopped")
 
     def kill(self):
         """Force kill session."""
-        self._pty_session.kill()
+        self._session.kill()
         if self.recorder:
             self.recorder.close()
         logger.info(f"Session '{self.name}' killed")
 
     def is_alive(self) -> bool:
         """Check if process is still running."""
-        return self._pty_session.is_alive()
+        return self._session.is_alive()
 
     def send_input(self, data: bytes):
         """Send raw bytes to process stdin."""
@@ -212,7 +216,7 @@ class ClaudeSession:
             return
         if self.recorder:
             self.recorder.record_input(data)
-        self._pty_session.send_input(data)
+        self._session.send_input(data)
 
     def send_text(self, text: str):
         """Send text string as input."""
@@ -224,19 +228,19 @@ class ClaudeSession:
 
     def resize(self, rows: int, cols: int):
         """Resize terminal."""
-        self._pty_session.resize(rows, cols)
+        self._session.resize(rows, cols)
 
     def get_buffer(self) -> bytes:
         """Get current output buffer."""
-        return self._pty_session.get_buffer()
+        return self._session.get_buffer()
 
     def add_output_callback(self, cb: Callable[[bytes], None]):
         """Register output callback."""
-        self._pty_session.add_output_callback(cb)
+        self._session.add_output_callback(cb)
 
     def remove_output_callback(self, cb: Callable[[bytes], None]):
         """Remove output callback."""
-        self._pty_session.remove_output_callback(cb)
+        self._session.remove_output_callback(cb)
 
     def info(self) -> dict:
         """Get session information."""

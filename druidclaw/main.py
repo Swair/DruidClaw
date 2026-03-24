@@ -262,7 +262,7 @@ def cmd_run(args):
     Run claude directly (no daemon) with I/O recording.
     Useful for simple single-session use.
     """
-    from druidclaw.core.session import ClaudeSession
+    from druidclaw.core.claude import ClaudeSession
     name = args.name or f"direct_{os.getpid()}"
     s = ClaudeSession(
         name=name,

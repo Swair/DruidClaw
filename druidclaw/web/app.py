@@ -74,15 +74,31 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
+    logger.info("Shutting down - cleaning up resources...")
     _stop_feishu_bot()
     _stop_telegram_bot()
     _stop_dingtalk_bot()
     _stop_qq_bot()
     _stop_wework_bot()
+    logger.info("All IM bots stopped")
+
     with _sessions_lock:
         names = list(_sessions.keys())
-    for n in names:
-        remove_session(n, force=True)
+
+    if names:
+        logger.info(f"Cleaning up {len(names)} sessions...")
+        for n in names:
+            try:
+                s = _sessions.get(n)
+                pid = s.pid if s and hasattr(s, 'pid') else '?'
+                remove_session(n, force=True)
+                logger.info(f"  Session '{n}' (PID: {pid}) killed")
+            except Exception as e:
+                logger.error(f"  Session '{n}' kill failed: {e}")
+    else:
+        logger.info("No active sessions to clean up")
+
+    logger.info("Shutdown complete")
 
 
 def create_app() -> FastAPI:

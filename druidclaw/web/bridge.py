@@ -20,7 +20,7 @@ from typing import Optional
 from datetime import datetime
 from pathlib import Path
 
-from druidclaw.core.session import ClaudeSession
+from druidclaw.core.claude import ClaudeSession
 from druidclaw.core.imbot.feishu import FeishuBot
 from druidclaw.core.imbot.telegram import TelegramBot
 from druidclaw.core.imbot.dingtalk import DingtalkBot

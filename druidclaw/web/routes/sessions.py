@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from druidclaw.web.state import _sessions, _sessions_lock
 from druidclaw.web.bridge import get_session, create_session, remove_session
-from druidclaw.core.session import ClaudeSession
+from druidclaw.core.claude import ClaudeSession
 
 logger = logging.getLogger(__name__)
 
@@ -137,13 +137,11 @@ async def ws_attach(websocket: WebSocket, name: str):
 
     s = get_session(name)
     if s is None:
-        # Auto-create if not existing
-        try:
-            s = create_session(name=name, workdir=".")
-        except Exception as e:
-            await websocket.send_json({"type": "error", "message": str(e)})
-            await websocket.close()
-            return
+        # Session does not exist - do NOT auto-create, return error
+        # Client should explicitly create session via POST /api/sessions first
+        await websocket.send_json({"type": "error", "message": f"Session '{name}' not found. Please create it first via POST /api/sessions"})
+        await websocket.close()
+        return
 
     if not s.is_alive():
         await websocket.send_json({"type": "error", "message": f"Session '{name}' is not alive"})
@@ -210,7 +208,15 @@ async def ws_attach(websocket: WebSocket, name: str):
                     s.resize(rows, cols)
                 elif mtype == "ping":
                     await websocket.send_json({"type": "pong"})
+                elif mtype == "kill_session":
+                    # Client explicitly requests session termination
+                    logger.info(f"WebSocket requested session kill: {name}")
+                    remove_session(name, force=True)
+                    break
         except WebSocketDisconnect:
+            # Client disconnected (closed tab/browser) — do NOT kill session
+            # User may reconnect later; session continues in background
+            logger.info(f"WebSocket disconnected (client detached): {name}")
             pass
         except Exception as e:
             logger.debug(f"ws_input_task error: {e}")

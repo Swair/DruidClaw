@@ -1,5 +1,6 @@
 venv
 log
+run
 *__pycache__*
 .claude
 .installed

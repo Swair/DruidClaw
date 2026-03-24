@@ -3,13 +3,14 @@ I/O recording for session logging.
 
 Records session I/O to log files with timestamps.
 """
+import os
 import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 
-LOG_DIR = Path(__file__).resolve().parent.parent.parent / "log"
+LOG_DIR = Path(os.environ.get("DRUIDCLAW_LOG_DIR", Path.cwd() / "run" / "logs"))
 
 
 class IORecorder:

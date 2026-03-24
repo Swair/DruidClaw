@@ -66,6 +66,7 @@ function connectSession(srv, name) {
   renderCards();
   updateToolbar();
   restoreTerminal();
+  safeFit(srv, name);
 
   ws.onopen = () => setTimeout(() => safeFit(srv, name), 60);
   ws.onmessage = ev => {
@@ -85,14 +86,15 @@ function connectSession(srv, name) {
       srv.sessions[name].status = 'dead';
       renderSessionList(); updateToolbar(); renderCards();
       term.write(`\r\n\x1b[33m[${t('session_exit_close')}]\x1b[0m\r\n`);
-      setTimeout(() => {
+      setTimeout(async () => {
         // 删除 _cards 中对应的 Claude 卡片（静默删除，无需确认）
         const card = _cards.find(c => c.type === 'claude' && c.name === name);
         if (card) {
-          // 直接调用 API 删除，跳过确认对话框
-          fetch(`/api/cards/${card.id}`, {method:'DELETE'}).catch(()=>{});
-          if (_expandedCardId === card.id) _expandedCardId = null;
-          loadCards();
+          try {
+            await fetch(`/api/cards/${card.id}`, {method:'DELETE'});
+            if (_expandedCardId === card.id) _expandedCardId = null;
+            await loadCards();
+          } catch(e) { console.error('delete card error:', e); }
         }
         // 删除会话
         if (srv.sessions[name]) {
@@ -103,12 +105,14 @@ function connectSession(srv, name) {
       srv.sessions[name].status = 'dead';
       renderSessionList(); updateToolbar(); renderCards();
       term.write(`\r\n\x1b[31m[${t('error')}: ${msg.message}]\x1b[0m\r\n`);
-      setTimeout(() => {
+      setTimeout(async () => {
         const card = _cards.find(c => c.type === 'claude' && c.name === name);
         if (card) {
-          fetch(`/api/cards/${card.id}`, {method:'DELETE'}).catch(()=>{});
-          if (_expandedCardId === card.id) _expandedCardId = null;
-          loadCards();
+          try {
+            await fetch(`/api/cards/${card.id}`, {method:'DELETE'});
+            if (_expandedCardId === card.id) _expandedCardId = null;
+            await loadCards();
+          } catch(e) { console.error('delete card error:', e); }
         }
         if (srv.sessions[name]) {
           killSessionByName(srv.id, name);

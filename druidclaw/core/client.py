@@ -8,8 +8,6 @@ import json
 import socket
 import select
 import struct
-import fcntl
-import termios
 import signal
 import base64
 import threading
@@ -20,8 +18,11 @@ from typing import Optional
 IS_WINDOWS = sys.platform == "win32"
 if IS_WINDOWS:
     import msvcrt
+else:
+    import fcntl
+    import termios
 
-from .daemon import SOCKET_PATH, RUN_DIR
+from .daemon import SOCKET_PATH, RUN_DIR, IS_WINDOWS, TCP_HOST, TCP_PORT
 
 
 class DaemonClient:
@@ -32,9 +33,16 @@ class DaemonClient:
         self._sock: Optional[socket.socket] = None
 
     def connect(self, timeout: float = 5.0):
-        self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self._sock.settimeout(timeout)
-        self._sock.connect(str(self.socket_path))
+        if IS_WINDOWS:
+            # Windows: use TCP socket
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.settimeout(timeout)
+            self._sock.connect((TCP_HOST, TCP_PORT))
+        else:
+            # Unix: use Unix domain socket
+            self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._sock.settimeout(timeout)
+            self._sock.connect(str(self.socket_path))
 
     def close(self):
         if self._sock:
@@ -147,7 +155,7 @@ def _attach_to_session_windows(name: str, client: "DaemonClient | None" = None):
         print(f"Error: {ack['error']}", file=sys.stderr)
         return
 
-    print(f"[Attached to '{name}' -- press Ctrl-Z to detach]\r")
+    print(f"[Attached to '{name}' -- press Ctrl-Z to detach, Ctrl-C to kill session]\r")
 
     stop_event = threading.Event()
 
@@ -181,6 +189,23 @@ def _attach_to_session_windows(name: str, client: "DaemonClient | None" = None):
                     break
                 sock.sendall(char.encode('utf-8'))
             time.sleep(0.05)  # Prevent CPU spinning
+    except KeyboardInterrupt:
+        # Ctrl-C pressed — kill the session before detaching
+        print("\r\n[Ctrl-C detected — killing session...]", flush=True)
+        try:
+            # Send detach signal first
+            sock.sendall(b"\xff\xff\xff")
+        except OSError:
+            pass
+        # Now send a command to daemon to kill the session
+        try:
+            cmd_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            cmd_sock.connect((TCP_HOST, TCP_PORT))
+            cmd_sock.sendall(json.dumps({"cmd": "kill", "name": name, "force": True}).encode() + b"\n")
+            cmd_sock.close()
+        except Exception:
+            pass
+        print("[Session killed]", flush=True)
     finally:
         stop_event.set()
         reader_thread.join(timeout=1)
@@ -210,7 +235,7 @@ def _attach_to_session_unix(name: str, client: "DaemonClient | None" = None):
         print(f"Error: {ack['error']}", file=sys.stderr)
         return
 
-    print(f"[Attached to '{name}' — press Ctrl-Z to detach]\r")
+    print(f"[Attached to '{name}' — press Ctrl-Z to detach, Ctrl-C to kill session]\r")
 
     # Put terminal in raw mode
     old_settings = None
@@ -284,6 +309,23 @@ def _attach_to_session_unix(name: str, client: "DaemonClient | None" = None):
                     sock.sendall(data)
                 except OSError:
                     break
+    except KeyboardInterrupt:
+        # Ctrl-C pressed — kill the session before detaching
+        print("\r\n[Ctrl-C detected — killing session...]", flush=True)
+        try:
+            # Send detach signal first so daemon knows we're done
+            sock.sendall(b"\xff\xff\xff")
+        except OSError:
+            pass
+        # Now send a command to daemon to kill the session
+        try:
+            cmd_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            cmd_sock.connect(str(SOCKET_PATH))
+            cmd_sock.sendall(json.dumps({"cmd": "kill", "name": name, "force": True}).encode() + b"\n")
+            cmd_sock.close()
+        except Exception:
+            pass
+        print("[Session killed]", flush=True)
     finally:
         stop_event.set()
         signal.signal(signal.SIGWINCH, old_sigwinch)

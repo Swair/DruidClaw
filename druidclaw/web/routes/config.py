@@ -54,6 +54,7 @@ class ConfigRequest(BaseModel):
 
 @router.get("/api/config")
 def api_get_config():
+    import sys
     cfg = _load_config()
     # Also expose current running bind info
     cfg["running_host"] = _server_config.get("host", "0.0.0.0")
@@ -61,6 +62,8 @@ def api_get_config():
     # Load Anthropic config from env or file
     cfg["anthropic_api_key"] = os.environ.get("ANTHROPIC_API_KEY", cfg.get("anthropic_api_key", ""))
     cfg["anthropic_base_url"] = os.environ.get("ANTHROPIC_BASE_URL", cfg.get("anthropic_base_url", "https://api.anthropic.com"))
+    # Expose platform info (for feature detection)
+    cfg["is_windows"] = sys.platform == "win32"
     return cfg
 
 

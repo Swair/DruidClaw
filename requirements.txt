@@ -9,3 +9,7 @@ python-dotenv>=1.0.0
 bcrypt>=4.0.0
 websockets>=15.0
 lark-oapi>=1.4.21
+
+# Windows terminal support (ConPTY)
+# Only required on Windows for local/Claude sessions
+pywinpty>=2.0.0; sys_platform == "win32"

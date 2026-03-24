@@ -76,7 +76,7 @@ DruidClaw/
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `DRUIDCLAW_TOKEN` | `dc` | Web 访问密码 |
-| `DRUIDCLAW_RUN_DIR` | `~/.druidclaw/run` | 运行时数据目录 |
+| `DRUIDCLAW_RUN_DIR` | `./run` | 运行时数据目录（相对路径） |
 | `DRUIDCLAW_WEB_HOST` | `0.0.0.0` | 绑定地址 |
 | `DRUIDCLAW_WEB_PORT` | `19123` | 监听端口 |
 

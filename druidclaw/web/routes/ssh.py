@@ -31,14 +31,56 @@ logger = logging.getLogger(__name__)
 
 IS_WINDOWS = sys.platform == "win32"
 
-# Windows: use powershell or cmd; Unix: use $SHELL or /bin/bash
+# Windows: use Git Bash or powershell or cmd; Unix: use $SHELL or /bin/bash
 if IS_WINDOWS:
-    # Try powershell first, then cmd
-    _LOCAL_SHELL = os.environ.get("COMSPEC", "cmd.exe")
-    if os.path.exists(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"):
-        _LOCAL_SHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    # Dynamically find Git Bash, powershell, or cmd
+    _GIT_BASH_PATH = None
+    _POWERSHELL_PATH = "powershell.exe"  # Use PATH lookup
+
+    # Try common Git Bash locations
+    _common_git_paths = [
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\bin\bash.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Git\bin\bash.exe"),
+        os.path.expandvars(r"%PROGRAMFILES%\Git\bin\bash.exe"),
+    ]
+
+    # Try where.exe to find git bash
+    try:
+        import subprocess
+        result = subprocess.run(["where", "bash"], capture_output=True, text=True, timeout=2)
+        if result.returncode == 0 and result.stdout.strip():
+            _GIT_BASH_PATH = result.stdout.strip().split('\n')[0]
+    except Exception:
+        pass
+
+    # If not found via where.exe, check common paths
+    if not _GIT_BASH_PATH:
+        for path in _common_git_paths:
+            if os.path.exists(path):
+                _GIT_BASH_PATH = path
+                break
+
+    # Determine shell to use
+    if _GIT_BASH_PATH:
+        _LOCAL_SHELL = _GIT_BASH_PATH
+    elif os.path.exists(_POWERSHELL_PATH) or _run_shell_test(_POWERSHELL_PATH):
+        _LOCAL_SHELL = _POWERSHELL_PATH
+    else:
+        _LOCAL_SHELL = os.environ.get("COMSPEC", "cmd.exe")
 else:
     _LOCAL_SHELL = os.environ.get("SHELL", "/bin/bash")
+
+
+def _run_shell_test(shell_path: str) -> bool:
+    """Test if a shell is executable."""
+    try:
+        import subprocess
+        result = subprocess.run([shell_path, "-c", "echo test"],
+                              capture_output=True, timeout=2)
+        return result.returncode == 0
+    except Exception:
+        return False
 _ssh_history_lock = _threading.Lock()
 
 # 保存断开的会话资源，用于页面刷新后重连
@@ -78,6 +120,9 @@ def _cleanup_disconnected_sessions():
                     if "child_pid" in sess:
                         os.kill(sess["child_pid"], 9)
                         os.waitpid(sess["child_pid"], 0)
+                    if "pty" in sess and sess["pty"]:
+                        # Windows winpty cleanup
+                        sess["pty"] = None  # Let GC handle cleanup
                     if "transport" in sess and sess["transport"]:
                         sess["transport"].close()
                     if "chan" in sess and sess["chan"]:
@@ -131,7 +176,141 @@ async def ws_local_shell(websocket: WebSocket, name: str):
     """
     WebSocket ↔ local shell PTY (bash/sh).
     Identical protocol to the Claude PTY bridge but launches $SHELL.
+
+    On Windows: uses winpty (same as ConPtySession).
+    On Unix: uses PTY with fork().
     """
+    if IS_WINDOWS:
+        await _ws_local_shell_windows(websocket, name)
+    else:
+        await _ws_local_shell_unix(websocket, name)
+
+
+async def _ws_local_shell_windows(websocket: WebSocket, name: str):
+    """
+    Windows local shell using winpty.
+    Mirrors the Unix implementation structure with disconnected session support.
+    """
+    import base64 as _b64
+
+    await websocket.accept()
+    logger.info(f"WebSocket accepted for local session '{name}'")
+
+    # Check for disconnected session to reuse
+    saved_sess = _get_disconnected_session(name)
+    pty = saved_sess.get("pty") if saved_sess else None
+    pty_alive = False
+
+    if pty is not None:
+        # Verify session is still alive
+        try:
+            pty_alive = pty.isalive()
+            if pty_alive:
+                logger.info(f"Reusing existing winpty session '{name}' (pid={pty.pid})")
+                _remove_disconnected_session(name)
+            else:
+                logger.info(f"Existing winpty session '{name}' is dead, creating new one")
+        except Exception as e:
+            logger.warning(f"Error checking winpty session status: {e}")
+            pty_alive = False
+
+    if not pty_alive:
+        # Create new winpty session
+        rows, cols = 24, 80
+        # Receive optional init params
+        logger.info(f"Waiting for local_connect message from session '{name}'...")
+        try:
+            init = await asyncio.wait_for(websocket.receive_json(), timeout=5)
+            logger.info(f"Received message from session '{name}': {init.get('type')}")
+            if init.get("type") == "local_connect":
+                rows = int(init.get("rows", 24))
+                cols = int(init.get("cols", 80))
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout waiting for local_connect message from session '{name}'")
+        except WebSocketDisconnect:
+            logger.info(f"WebSocket disconnected before receiving local_connect from session '{name}'")
+            return
+        except Exception as e:
+            logger.warning(f"Error receiving local_connect message from session '{name}': {e}")
+            pass
+
+        # Create winpty and spawn shell
+        from winpty import PTY
+        pty = PTY(cols=cols, rows=rows)
+        pty.spawn(_LOCAL_SHELL)
+        logger.info(f"Created new winpty session '{name}' (pid={pty.pid})")
+
+    await websocket.send_json({"type": "connected", "name": name, "pid": pty.pid})
+
+    loop = asyncio.get_event_loop()
+    stop_ev = asyncio.Event()
+
+    # Winpty → WebSocket
+    async def pty_to_ws():
+        empty_read_count = 0
+        while not stop_ev.is_set():
+            try:
+                data = await loop.run_in_executor(None, lambda: pty.read())
+                if not data:
+                    empty_read_count += 1
+                    # 允许 3 次空读取，避免 PTY 初始化期间误判
+                    if empty_read_count >= 3:
+                        # 检查 PTY 是否还活着
+                        try:
+                            if not pty.isalive():
+                                break
+                        except Exception:
+                            break
+                    await asyncio.sleep(0.1)  # 短暂等待后再试
+                    continue
+                empty_read_count = 0  # 重置计数器
+                await websocket.send_json({
+                    "type": "output",
+                    "data": _b64.b64encode(data.encode('utf-8')).decode()
+                })
+            except Exception:
+                break
+        stop_ev.set()
+        try:
+            await websocket.send_json({"type": "exit"})
+        except Exception:
+            pass
+
+    # WebSocket → Winpty
+    async def ws_to_pty():
+        try:
+            while not stop_ev.is_set():
+                msg = await websocket.receive_json()
+                if msg.get("type") == "input":
+                    data = _b64.b64decode(msg["data"])
+                    await loop.run_in_executor(None, lambda: pty.write(data.decode('utf-8', errors='replace')))
+                elif msg.get("type") == "resize":
+                    r = max(int(msg.get("rows", 24)), 1)
+                    c = max(int(msg.get("cols", 80)), 1)
+                    # pywinpty.set_size takes (cols, rows) order
+                    await loop.run_in_executor(None, lambda: pty.set_size(c, r))
+                elif msg.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            logger.debug(f"ws_to_pty error: {e}")
+        finally:
+            stop_ev.set()
+
+    try:
+        await asyncio.gather(pty_to_ws(), ws_to_pty())
+    except Exception:
+        pass
+    finally:
+        stop_ev.set()
+        # Save session resources on disconnect (same as Unix impl)
+        logger.info(f"WebSocket disconnected for session '{name}', saving resources")
+        _save_disconnected_session(name, pty=pty)
+
+
+async def _ws_local_shell_unix(websocket: WebSocket, name: str):
+    """Unix PTY-based local shell."""
     import pty as _pty, fcntl as _fcntl, termios as _termios, struct as _struct, select as _select
     import base64 as _b64
     import time as _time
@@ -192,13 +371,25 @@ async def ws_local_shell(websocket: WebSocket, name: str):
     stop_ev = asyncio.Event()
 
     async def pty_to_ws():
+        empty_read_count = 0
         while not stop_ev.is_set():
             try:
                 rlist, _, _ = await loop.run_in_executor(
                     None, lambda: _select.select([master_fd], [], [], 0.1))
                 if rlist:
                     data = os.read(master_fd, 4096)
-                    if not data: break
+                    if not data:
+                        empty_read_count += 1
+                        # 允许 3 次空读取，避免 PTY 初始化期间误判
+                        if empty_read_count >= 3:
+                            # 检查进程是否还活着
+                            try:
+                                os.kill(child_pid, 0)
+                            except OSError:
+                                break
+                        await asyncio.sleep(0.1)
+                        continue
+                    empty_read_count = 0
                     await websocket.send_json({"type": "output",
                                                "data": _b64.b64encode(data).decode()})
             except Exception: break

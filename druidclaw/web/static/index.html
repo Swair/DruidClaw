@@ -16,6 +16,58 @@
 </head>
 <body style="display:flex;flex-direction:column;height:100vh">
 
+<!-- 登录检查脚本 -->
+<script>
+// ============================================================================
+// 认证检查模块 - 每次页面加载时验证 cc_token 是否与后端密码一致
+// ============================================================================
+(function() {
+  // 检查 token 有效性的函数
+  window.checkAuthStatus = async function() {
+    try {
+      const r = await fetch('/api/auth/check', {
+        method: 'POST',
+        credentials: 'include',  // 必须携带 cookie
+        headers: {'Content-Type': 'application/json'}
+      });
+      const data = await r.json();
+
+      // 检查认证结果
+      if (r.status === 401 || (data && data.ok === false)) {
+        // token 无效或未授权，强制跳转到登录页
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.replace('/login?next=' + next);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      // 网络错误，可能是服务器未启动，继续加载页面
+      console.warn('Auth check error, skipping:', e);
+      return true;
+    }
+  };
+
+  // 页面加载时执行认证检查
+  (async function checkAuth() {
+    await window.checkAuthStatus();
+  })();
+
+  // 全局 fetch 拦截器 - 检查所有 API 请求的响应状态
+  // 如果返回 401，说明后端密码已更改或 token 失效，强制跳转登录页
+  const _originalFetch = window.fetch;
+  window.fetch = function(...args) {
+    return _originalFetch.apply(this, args).then(async function(response) {
+      if (response.status === 401) {
+        // API 返回 401，说明 token 无效或后端密码已更改
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.replace('/login?next=' + next);
+      }
+      return response;
+    });
+  };
+})();
+</script>
+
 <!-- Header -->
 <div class="header">
   <h1><img src="/static/logo.png" alt="DruidClaw" style="height:24px;vertical-align:middle;margin-right:6px">DruidClaw</h1>
@@ -387,7 +439,7 @@
 
 <!-- New card modal -->
 <div class="overlay" id="new-card-modal" onclick="closeNewCardModal(event)">
-  <div class="modal" style="width:380px" onclick="event.stopPropagation()">
+  <div class="modal" style="width:520px" onclick="event.stopPropagation()">
     <h3 data-i18n="create_card">新建卡片</h3>
     <div class="nc-types">
       <div class="nc-type-btn sel" id="nc-t-claude" onclick="selectNcType('claude')">
@@ -667,7 +719,7 @@
         <thead><tr><th data-i18n="cfg_col_var">变量</th><th data-i18n="cfg_col_default">默认值</th><th data-i18n="cfg_col_desc">说明</th></tr></thead>
         <tbody>
           <tr><td><code>DRUIDCLAW_TOKEN</code></td><td><code>cc</code></td><td data-i18n="cfg_druidclaw_token">Web 访问密码（<code>--passwd</code> 可覆盖）</td></tr>
-          <tr><td><code>DRUIDCLAW_RUN_DIR</code></td><td><code>~/.druidclaw/run</code></td><td data-i18n="cfg_druidclaw_run_dir">运行时数据目录（所有 JSON 配置文件所在位置）</td></tr>
+          <tr><td><code>DRUIDCLAW_RUN_DIR</code></td><td><code>./run</code></td><td data-i18n="cfg_druidclaw_run_dir">运行时数据目录（所有 JSON 配置文件所在位置）</td></tr>
           <tr><td><code>DRUIDCLAW_WEB_HOST</code></td><td><code>0.0.0.0</code></td><td data-i18n="cfg_druidclaw_web_host">绑定地址（启动时写入，优先于 config.json）</td></tr>
           <tr><td><code>DRUIDCLAW_WEB_PORT</code></td><td><code>19123</code></td><td data-i18n="cfg_druidclaw_web_port">监听端口（启动时写入，优先于 config.json）</td></tr>
         </tbody>
@@ -722,11 +774,11 @@
       <table class="cfg-ref-table">
         <thead><tr><th data-i18n="cfg_col_path">路径</th><th data-i18n="cfg_col_desc">说明</th></tr></thead>
         <tbody>
-          <tr><td><code>~/.druidclaw/logs/</code></td><td data-i18n="cfg_path_logs">PTY 会话日志（<code>.log</code> 文本 / <code>.raw</code> 二进制录像）</td></tr>
-          <tr><td><code>~/.druidclaw/run/daemon.sock</code></td><td data-i18n="cfg_path_socket">Unix socket（daemon 模式 IPC）</td></tr>
-          <tr><td><code>~/.druidclaw/run/daemon.pid</code></td><td data-i18n="cfg_path_pid">daemon 进程 PID 文件</td></tr>
+          <tr><td><code>./run/logs/</code></td><td data-i18n="cfg_path_logs">PTY 会话日志（<code>.log</code> 文本 / <code>.raw</code> 二进制录像）</td></tr>
+          <tr><td><code>./run/daemon.sock</code></td><td data-i18n="cfg_path_socket">Unix socket（daemon 模式 IPC）</td></tr>
+          <tr><td><code>./run/daemon.pid</code></td><td data-i18n="cfg_path_pid">daemon 进程 PID 文件</td></tr>
           <tr><td><code>~/.claude/skills/*/SKILL.md</code></td><td data-i18n="cfg_path_skills">Skills 侧边栏数据来源</td></tr>
-          <tr><td><code>/tmp/druidclaw_{name}_{ts}.log</code></td><td data-i18n="cfg_path_ssh_log">SSH 会话临时日志</td></tr>
+          <tr><td><code>./run/logs/ssh_{name}_{ts}.log</code></td><td data-i18n="cfg_path_ssh_log">SSH 会话临时日志</td></tr>
         </tbody>
       </table>
       <div style="height:8px"></div>

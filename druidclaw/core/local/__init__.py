@@ -1,7 +1,12 @@
 """
 Local terminal session management.
 
-Provides local shell terminal functionality using PTY.
+Provides local shell terminal functionality using the cross-platform
+platform abstraction layer.
+
+Platform support:
+- Unix/Linux/macOS: Uses PtySession (pty)
+- Windows: Uses ConPtySession (winpty)
 """
 import os
 import threading
@@ -9,7 +14,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Callable
 
-from ..claude.pty_wrapper import PTYSession
+from ..platform import create_session, IS_WINDOWS
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +24,7 @@ class LocalSession:
     """
     Manages a local shell terminal session.
 
-    Uses PTY to run a local shell process.
+    Uses the cross-platform platform layer to run a local shell process.
     """
 
     def __init__(
@@ -39,7 +44,10 @@ class LocalSession:
         self._attach_lock = threading.Lock()
 
         cmd = [self.shell] + self.shell_args
-        self._pty_session = PTYSession(
+
+        # Use cross-platform session factory
+        self._session = create_session(
+            name=name,
             cmd=cmd,
             workdir=self.workdir,
             env={},
@@ -49,58 +57,58 @@ class LocalSession:
 
     @property
     def pid(self) -> Optional[int]:
-        return self._pty_session.pid
+        return self._session.pid
 
     @property
     def _running(self) -> bool:
-        return self._pty_session._running
+        return self._session._running
 
     @_running.setter
     def _running(self, value: bool):
-        self._pty_session._running = value
+        self._session._running = value
 
     @property
     def _buf(self) -> bytearray:
-        return self._pty_session._buf
+        return self._session._buf
 
     @_buf.setter
     def _buf(self, value: bytearray):
-        self._pty_session._buf = value
+        self._session._buf = value
 
     @property
     def _output_callbacks(self) -> list:
-        return self._pty_session._output_callbacks
+        return self._session._output_callbacks
 
     @_output_callbacks.setter
     def _output_callbacks(self, value: list):
-        self._pty_session._output_callbacks = value
+        self._session._output_callbacks = value
 
     def start(self):
         """Start local shell session."""
         if self._running:
             raise RuntimeError(f"Session '{self.name}' already running")
-        self._pty_session.start()
+        self._session.start()
         logger.info(f"Local session '{self.name}' started (pid={self.pid})")
 
     def stop(self, timeout: float = 3.0):
         """Stop session gracefully."""
-        self._pty_session.stop(timeout=timeout)
+        self._session.stop(timeout=timeout)
         logger.info(f"Local session '{self.name}' stopped")
 
     def kill(self):
         """Force kill session."""
-        self._pty_session.kill()
+        self._session.kill()
         logger.info(f"Local session '{self.name}' killed")
 
     def is_alive(self) -> bool:
         """Check if process is still running."""
-        return self._pty_session.is_alive()
+        return self._session.is_alive()
 
     def send_input(self, data: bytes):
         """Send raw bytes to session stdin."""
         if not self._running:
             return
-        self._pty_session.send_input(data)
+        self._session.send_input(data)
 
     def send_text(self, text: str):
         """Send text string as input."""
@@ -112,19 +120,19 @@ class LocalSession:
 
     def resize(self, rows: int, cols: int):
         """Resize terminal."""
-        self._pty_session.resize(rows, cols)
+        self._session.resize(rows, cols)
 
     def get_buffer(self) -> bytes:
         """Get current output buffer."""
-        return self._pty_session.get_buffer()
+        return self._session.get_buffer()
 
     def add_output_callback(self, cb: Callable[[bytes], None]):
         """Register output callback."""
-        self._pty_session.add_output_callback(cb)
+        self._session.add_output_callback(cb)
 
     def remove_output_callback(self, cb: Callable[[bytes], None]):
         """Remove output callback."""
-        self._pty_session.remove_output_callback(cb)
+        self._session.remove_output_callback(cb)
 
     def info(self) -> dict:
         """Get session information."""

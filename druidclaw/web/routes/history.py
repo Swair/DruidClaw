@@ -15,8 +15,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Log files are stored here (same as core/session.py LOG_DIR default)
-_LOG_DIR = Path(os.environ.get("DRUIDCLAW_LOG_DIR",
-    str(Path(__file__).resolve().parent.parent.parent.parent / "log")))
+_LOG_DIR = Path(os.environ.get("DRUIDCLAW_LOG_DIR", Path.cwd() / "run" / "logs"))
 
 # Summaries persist here
 from druidclaw.web.state import RUN_DIR

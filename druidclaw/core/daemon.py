@@ -22,18 +22,18 @@ IS_WINDOWS = os.name == "nt"
 if not IS_WINDOWS:
     import select
 
-from .session import ClaudeSession
+from .claude import ClaudeSession
 
 logger = logging.getLogger(__name__)
 
 # On Windows, use TCP socket instead of Unix socket
 if IS_WINDOWS:
-    RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", Path.cwd() / ".druidclaw"))
+    RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", Path.cwd() / "run"))
     SOCKET_PATH = None  # Not used on Windows
     TCP_HOST = "127.0.0.1"
     TCP_PORT = 19124  # Daemon IPC port
 else:
-    RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", os.path.expanduser("~/.app/run")))
+    RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", Path.cwd() / "run"))
     SOCKET_PATH = RUN_DIR / "daemon.sock"
     TCP_HOST = None
     TCP_PORT = None
@@ -42,6 +42,10 @@ PID_FILE = RUN_DIR / "daemon.pid"
 
 # Detach signal (3 bytes 0xff from client)
 DETACH_SIGNAL = b"\xff\xff\xff"
+
+
+# Maximum number of concurrent sessions allowed
+MAX_SESSIONS = 30
 
 
 class CCDaemon:
@@ -129,7 +133,18 @@ class CCDaemon:
         logger.info("CC Daemon stopped")
 
     def _handle_sigterm(self, sig, frame):
+        logger.info(f"Received signal {sig}, shutting down...")
         self._running = False
+        # Force kill all sessions immediately on Ctrl+C/SIGTERM
+        with self._lock:
+            for name, s in list(self.sessions.items()):
+                try:
+                    logger.info(f"Killing session '{name}'...")
+                    s.kill()
+                except Exception as e:
+                    logger.error(f"Error killing session '{name}': {e}")
+            self.sessions.clear()
+        logger.info("All sessions killed, daemon ready to shutdown")
 
     def _watchdog(self):
         while self._running:
@@ -139,7 +154,12 @@ class CCDaemon:
             for name in dead:
                 logger.info(f"Removing dead session '{name}'")
                 with self._lock:
-                    self.sessions.pop(name, None)
+                    s = self.sessions.pop(name, None)
+                if s:
+                    try:
+                        s.kill()  # Force kill the session
+                    except Exception:
+                        pass
 
     # ------------------------------------------------------------------ #
     #  Client handler                                                      #
@@ -232,6 +252,12 @@ class CCDaemon:
         name = req.get("name")
         workdir = req.get("workdir", ".")
         args = req.get("args", [])
+
+        # Check max sessions limit
+        with self._lock:
+            if len(self.sessions) >= MAX_SESSIONS:
+                return {"error": f"Maximum number of sessions ({MAX_SESSIONS}) reached"}
+
         if not name:
             with self._lock:
                 idx = len(self.sessions) + 1

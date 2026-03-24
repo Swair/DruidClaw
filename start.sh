@@ -25,7 +25,7 @@ check_installed() {
     [ -f "$SCRIPT_DIR/.installed" ] && return 0
 
     # Check Python venv exists
-    [ ! -x "$SCRIPT_DIR/venv/bin/python3" ] && return 1
+    [ ! -x "python3" ] && return 1
 
     # Quick check: verify druidclaw package exists
     [ ! -d "$SCRIPT_DIR/venv/lib/"*"/site-packages/druidclaw" ] && \
@@ -41,7 +41,8 @@ do_install() {
 
     # Check Python version
     echo ">>> Checking Python version..."
-    if ! command -v python3 &> /dev/null; then
+    PYTHON_PATH=$(which python3)
+    if [ -z "$PYTHON_PATH" ]; then
         echo -e "${RED}Error: Python 3 is not installed${NC}"
         echo "Please install Python 3.8+ first:"
         echo "  Ubuntu/Debian: sudo apt install python3 python3-pip python3-venv"
@@ -51,6 +52,7 @@ do_install() {
 
     PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
     echo -e "    ${GREEN}Python version: $PYTHON_VERSION${NC}"
+    echo -e "    ${GREEN}Python path: $PYTHON_PATH${NC}"
 
     # Check for pip
     echo ">>> Checking pip..."
@@ -104,14 +106,22 @@ do_install() {
 # Main logic
 # Allow skipping install check via environment variable (set after first successful install)
 if [ -f "$SCRIPT_DIR/.installed" ]; then
-    # Already installed, skip check and start directly
-    exec "$SCRIPT_DIR/venv/bin/python3" -m druidclaw.web "$@"
+    # Already installed, skip check and start directly using venv Python
+    if [ -x "$SCRIPT_DIR/venv/bin/python" ]; then
+        exec "$SCRIPT_DIR/venv/bin/python" -m druidclaw.web "$@"
+    else
+        exec "python3" -m druidclaw.web "$@"
+    fi
 elif check_installed; then
     # First time: mark as installed
     touch "$SCRIPT_DIR/.installed"
     echo -e "${GREEN}>>> 检测到 DruidClaw 已安装，正在启动...${NC}"
     echo
-    exec "$SCRIPT_DIR/venv/bin/python3" -m druidclaw.web "$@"
+    if [ -x "$SCRIPT_DIR/venv/bin/python" ]; then
+        exec "$SCRIPT_DIR/venv/bin/python" -m druidclaw.web "$@"
+    else
+        exec "python3" -m druidclaw.web "$@"
+    fi
 else
     echo -e "${YELLOW}>>> 首次运行检测，DruidClaw 尚未安装${NC}"
     echo
@@ -133,5 +143,9 @@ else
 
     echo -e "${GREEN}>>> 安装完成，正在启动 DruidClaw...${NC}"
     echo
-    exec "$SCRIPT_DIR/venv/bin/python3" -m druidclaw.web "$@"
+    if [ -x "$SCRIPT_DIR/venv/bin/python" ]; then
+        exec "$SCRIPT_DIR/venv/bin/python" -m druidclaw.web "$@"
+    else
+        exec "python3" -m druidclaw.web "$@"
+    fi
 fi

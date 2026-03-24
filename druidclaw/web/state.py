@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from druidclaw.core.session import ClaudeSession
+from druidclaw.core.claude import ClaudeSession
 from druidclaw.core.imbot.feishu import FeishuBot
 from druidclaw.core.imbot.telegram import TelegramBot
 from druidclaw.core.imbot.dingtalk import DingtalkBot
@@ -61,7 +61,7 @@ _root_logger = _logging.getLogger()
 _root_logger.setLevel(_logging.INFO)
 _root_logger.addHandler(_ring_handler)
 
-RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", os.path.expanduser("~/.app/run")))
+RUN_DIR = Path(os.environ.get("DRUIDCLAW_RUN_DIR", Path.cwd() / "run"))
 
 # ── Feishu bot registry ──────────────────────────────────────────── #
 

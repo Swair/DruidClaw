@@ -7,7 +7,8 @@ router = APIRouter()
 
 _DRUIDCLAW_TOKEN: str = os.environ.get("DRUIDCLAW_TOKEN", "dc").strip()
 
-_PUBLIC = {"/login", "/logout", "/favicon.ico"}
+_PUBLIC = {"/login", "/logout", "/favicon.ico", "/api/auth/check"}
+_STATIC_PREFIX = "/static"
 
 _LOGIN_HTML = """<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>DruidClaw</title><style>
@@ -40,19 +41,30 @@ button:hover{{background:#6c5fc7}}
 
 
 async def _auth_middleware(request: Request, call_next):
+    # 如果没有设置令牌，则不需要认证
     if not _DRUIDCLAW_TOKEN:
         return await call_next(request)
-    if request.url.path in _PUBLIC:
+
+    # 检查是否是公开路径
+    if request.url.path in _PUBLIC or request.url.path.startswith(_STATIC_PREFIX):
         return await call_next(request)
+
+    # 获取用户的 token（从 cookie、header 或 query 参数）
     token = (
         request.cookies.get("cc_token", "")
         or request.headers.get("authorization", "").removeprefix("Bearer ").strip()
         or request.query_params.get("token", "")
     )
+
+    # token 有效，允许访问
     if token == _DRUIDCLAW_TOKEN:
         return await call_next(request)
+
+    # 对于 API、WebSocket 和 Webhook 请求，返回 401
     if any(request.url.path.startswith(p) for p in ("/api", "/ws", "/webhook")):
         return Response(status_code=401, content="Unauthorized")
+
+    # 对于其他请求，重定向到登录页面
     return RedirectResponse(url=f"/login?next={request.url.path}", status_code=303)
 
 
@@ -60,6 +72,24 @@ async def _auth_middleware(request: Request, call_next):
 def login_page(next: str = "/", error: str = ""):
     err = '<p class="err">密码错误，请重试</p>' if error else ""
     return HTMLResponse(_LOGIN_HTML.format(next=next, error=err))
+
+
+@router.post("/api/auth/check")
+async def auth_check(request: Request):
+    """Check if the current request is authenticated."""
+    if not _DRUIDCLAW_TOKEN:
+        return {"ok": True, "auth_enabled": False}
+
+    token = (
+        request.cookies.get("cc_token", "")
+        or request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+        or request.query_params.get("token", "")
+    )
+
+    if token == _DRUIDCLAW_TOKEN:
+        return {"ok": True, "auth_enabled": True}
+
+    return Response(status_code=401, content="Unauthorized")
 
 
 @router.post("/login")

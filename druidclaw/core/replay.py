@@ -76,7 +76,7 @@ def main():
     path = Path(args.file)
     if not path.exists():
         # Try finding in log dir
-        from .session import LOG_DIR
+        from .claude import LOG_DIR
         candidates = list(LOG_DIR.glob(f"*{args.file}*"))
         if candidates:
             path = sorted(candidates)[-1]
